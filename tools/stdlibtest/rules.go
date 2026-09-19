@@ -34,7 +34,6 @@ func rulesFor(target targetInfo, opts options, hostOS string) ruleSet {
 	r.skipPackage("go/internal/gcimporter")
 	r.skipPackage("go/internal/srcimporter")
 	r.skipPackage("go/types")
-	r.skipPackage("hash/maphash")
 	r.skipPackage("internal/types/errors")
 	// OID encoding and self-signed certificate tests fail.
 	r.skipPackage("crypto/x509")
