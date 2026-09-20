@@ -160,6 +160,15 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (BuildRe
 		defer unlock()
 		libcDependencies = append(libcDependencies, dummyCompileJob(filepath.Join(filepath.Dir(libcJob.result), "crt1.o")))
 		libcDependencies = append(libcDependencies, libcJob)
+	case "glibc":
+		// Nothing to build: glibc is already on the machine, and is linked
+		// dynamically via -lc. Only its startup objects have to be named,
+		// since the linker will not find them by itself.
+		libDir, err := compileopts.GlibcLibDir()
+		if err != nil {
+			return BuildResult{}, err
+		}
+		libcDependencies = append(libcDependencies, glibcStartupJobs(libDir)...)
 	case "picolibc":
 		libcJob, unlock, err := libPicolibc.load(config, tmpdir)
 		if err != nil {

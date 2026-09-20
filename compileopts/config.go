@@ -436,6 +436,12 @@ func (c *Config) LibcCFlags() []string {
 			"-isystem", filepath.Join(picolibcDir, "stdio"),
 			"-D__PICOLIBC_ERRNO_FUNCTION=__errno_location",
 		}
+	case "glibc":
+		// The system glibc, so the system headers are the right ones: no
+		// -nostdlibinc, and nothing to point at. This is the only libc
+		// here that does not bring its own headers, which is the whole
+		// difference between it and the others.
+		return nil
 	case "musl":
 		root := goenv.Get("TINYGOROOT")
 		path := c.LibraryPath("musl")
