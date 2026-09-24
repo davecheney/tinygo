@@ -89,6 +89,8 @@ func goexit() {
 }
 
 // Add this task to the end of the run queue.
+//
+//go:noheap
 func scheduleTask(t *task.Task) {
 	synctestTaskWake(t)
 	runqueue.Push(t)
@@ -105,6 +107,8 @@ func NumCPU() int {
 }
 
 // Add this task to the sleep queue, assuming its state is set to sleeping.
+//
+//go:noheap
 func addSleepTask(t *task.Task, duration timeUnit) {
 	if schedulerDebug {
 		println("  set sleep:", t, duration)
@@ -144,6 +148,8 @@ func addSleepTask(t *task.Task, duration timeUnit) {
 // queue already.
 // This function is very similar to addSleepTask but for timerQueue instead of
 // sleepQueue.
+//
+//go:noheap
 func addTimer(tim *timerNode) {
 	mask := interrupt.Disable()
 	timerQueueAdd(tim)
@@ -152,6 +158,8 @@ func addTimer(tim *timerNode) {
 
 // reAddTimer finishes firing a timer. The cooperative scheduler runs timer
 // callbacks to completion, so periodic timers can be re-added directly.
+//
+//go:noheap
 func reAddTimer(tn *timerNode) {
 	if tn.timer.period == 0 {
 		return
@@ -162,6 +170,8 @@ func reAddTimer(tn *timerNode) {
 
 // removeTimer is the implementation of time.stopTimer. It removes a timer from
 // the timer queue, returning it if the timer is present in the timer queue.
+//
+//go:noheap
 func removeTimer(tim *timer) *timerNode {
 	mask := interrupt.Disable()
 	n := timerQueueRemove(tim)

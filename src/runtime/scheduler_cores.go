@@ -39,6 +39,8 @@ func goexit() {
 
 // Mark the given task as ready to resume.
 // This is allowed even if the task isn't paused yet, but will pause soon.
+//
+//go:noheap
 func scheduleTask(t *task.Task) {
 	synctestTaskWake(t)
 	schedulerLock.Lock()
@@ -62,6 +64,7 @@ func scheduleTask(t *task.Task) {
 	schedulerLock.Unlock()
 }
 
+//go:noheap
 func addSleepTask(t *task.Task, wakeup timeUnit) {
 	// Save the timestamp when the task should be woken up.
 	t.Data = uint64(wakeup)
@@ -101,6 +104,7 @@ func NumCPU() int {
 	return numCPU
 }
 
+//go:noheap
 func addTimer(tn *timerNode) {
 	schedulerLock.Lock()
 	timerQueueAdd(tn)
@@ -110,6 +114,8 @@ func addTimer(tn *timerNode) {
 
 // reAddTimer finishes firing a timer. It re-adds periodic timers unless they
 // were stopped or reset while the callback was running.
+//
+//go:noheap
 func reAddTimer(tn *timerNode) {
 	schedulerLock.Lock()
 
@@ -135,6 +141,7 @@ func reAddTimer(tn *timerNode) {
 	schedulerLock.Unlock()
 }
 
+//go:noheap
 func removeTimer(t *timer) *timerNode {
 	schedulerLock.Lock()
 	n := timerQueueRemove(t)

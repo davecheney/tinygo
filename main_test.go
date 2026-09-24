@@ -201,6 +201,26 @@ func TestBuild(t *testing.T) {
 			}
 		})
 
+		// Scheduler queues and timer lists are manipulated while scheduler
+		// locks are held, so these paths must not allocate at -opt=0.
+		t.Run("opt=0-scheduler-noheap", func(t *testing.T) {
+			t.Parallel()
+			for _, target := range []string{"", "cortex-m-qemu", "riscv-qemu"} {
+				opts := optionsFromTarget(target, sema)
+				opts.Opt = "0"
+				config, err := builder.NewConfig(&opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = Build("testdata/timers.go", t.TempDir()+"/scheduler-noheap", config)
+				if err != nil {
+					w := &bytes.Buffer{}
+					diagnostics.CreateDiagnostics(err).WriteTo(w, "")
+					t.Fatal(w.String())
+				}
+			}
+		})
+
 		t.Run("gc=none-runtime-panic", func(t *testing.T) {
 			t.Parallel()
 			opts := optionsFromTarget("cortex-m-qemu", sema)
