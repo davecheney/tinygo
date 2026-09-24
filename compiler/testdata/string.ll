@@ -145,13 +145,79 @@ unwind.return:                                    ; preds = %lookup.throw
 }
 
 ; Function Attrs: nounwind
+define hidden i1 @main.byteSliceStringCompareLess(ptr %s1.data, i32 %s1.len, i32 %s1.cap, ptr %s2.data, i32 %s2.len, i32 %s2.cap, ptr %context) unnamed_addr #1 {
+entry:
+  %stackalloc = alloca i8, align 1
+  call void @runtime.trackPointer(ptr %s1.data, ptr nonnull %stackalloc, ptr undef) #3
+  call void @runtime.trackPointer(ptr %s2.data, ptr nonnull %stackalloc, ptr undef) #3
+  %0 = call i1 @runtime.stringLess(ptr %s1.data, i32 %s1.len, ptr %s2.data, i32 %s2.len, ptr undef) #3
+  ret i1 %0
+}
+
+declare i1 @runtime.stringLess(ptr readonly, i32, ptr readonly, i32, ptr) #0
+
+; Function Attrs: nounwind
+define hidden i1 @main.byteSliceStringCompareLessEqual(ptr %s1.data, i32 %s1.len, i32 %s1.cap, ptr %s2.data, i32 %s2.len, i32 %s2.cap, ptr %context) unnamed_addr #1 {
+entry:
+  %stackalloc = alloca i8, align 1
+  call void @runtime.trackPointer(ptr %s1.data, ptr nonnull %stackalloc, ptr undef) #3
+  call void @runtime.trackPointer(ptr %s2.data, ptr nonnull %stackalloc, ptr undef) #3
+  %0 = call i1 @runtime.stringLess(ptr %s2.data, i32 %s2.len, ptr %s1.data, i32 %s1.len, ptr undef) #3
+  %1 = xor i1 %0, true
+  ret i1 %1
+}
+
+; Function Attrs: nounwind
+define hidden i1 @main.byteSliceStringCompareGreater(ptr %s1.data, i32 %s1.len, i32 %s1.cap, ptr %s2.data, i32 %s2.len, i32 %s2.cap, ptr %context) unnamed_addr #1 {
+entry:
+  %stackalloc = alloca i8, align 1
+  call void @runtime.trackPointer(ptr %s1.data, ptr nonnull %stackalloc, ptr undef) #3
+  call void @runtime.trackPointer(ptr %s2.data, ptr nonnull %stackalloc, ptr undef) #3
+  %0 = call i1 @runtime.stringLess(ptr %s2.data, i32 %s2.len, ptr %s1.data, i32 %s1.len, ptr undef) #3
+  ret i1 %0
+}
+
+; Function Attrs: nounwind
+define hidden i1 @main.byteSliceStringCompareGreaterEqual(ptr %s1.data, i32 %s1.len, i32 %s1.cap, ptr %s2.data, i32 %s2.len, i32 %s2.cap, ptr %context) unnamed_addr #1 {
+entry:
+  %stackalloc = alloca i8, align 1
+  call void @runtime.trackPointer(ptr %s1.data, ptr nonnull %stackalloc, ptr undef) #3
+  call void @runtime.trackPointer(ptr %s2.data, ptr nonnull %stackalloc, ptr undef) #3
+  %0 = call i1 @runtime.stringLess(ptr %s1.data, i32 %s1.len, ptr %s2.data, i32 %s2.len, ptr undef) #3
+  %1 = xor i1 %0, true
+  ret i1 %1
+}
+
+; Function Attrs: nounwind
+define hidden i1 @main.byteSliceStringCompareLessSideEffects(ptr %s1.data, i32 %s1.len, i32 %s1.cap, ptr %s2.data, i32 %s2.len, i32 %s2.cap, ptr %context) unnamed_addr #1 {
+entry:
+  %stackalloc = alloca i8, align 1
+  %0 = call %runtime._string @runtime.stringFromBytes(ptr %s1.data, i32 %s1.len, i32 %s1.cap, ptr undef) #3
+  %1 = extractvalue %runtime._string %0, 0
+  call void @runtime.trackPointer(ptr %1, ptr nonnull %stackalloc, ptr undef) #3
+  %2 = call { ptr, i32, i32 } @main.mutateBytes(ptr %s2.data, i32 %s2.len, i32 %s2.cap, ptr undef)
+  %3 = extractvalue { ptr, i32, i32 } %2, 0
+  call void @runtime.trackPointer(ptr %3, ptr nonnull %stackalloc, ptr undef) #3
+  %4 = extractvalue { ptr, i32, i32 } %2, 0
+  %5 = extractvalue { ptr, i32, i32 } %2, 1
+  %6 = extractvalue { ptr, i32, i32 } %2, 2
+  %7 = call %runtime._string @runtime.stringFromBytes(ptr %4, i32 %5, i32 %6, ptr undef) #3
+  %8 = extractvalue %runtime._string %7, 0
+  call void @runtime.trackPointer(ptr %8, ptr nonnull %stackalloc, ptr undef) #3
+  %9 = extractvalue %runtime._string %0, 0
+  %10 = extractvalue %runtime._string %0, 1
+  %11 = extractvalue %runtime._string %7, 0
+  %12 = extractvalue %runtime._string %7, 1
+  %13 = call i1 @runtime.stringLess(ptr %9, i32 %10, ptr %11, i32 %12, ptr undef) #3
+  ret i1 %13
+}
+
+; Function Attrs: nounwind
 define hidden i1 @main.stringCompareLarger(ptr readonly %s1.data, i32 %s1.len, ptr readonly %s2.data, i32 %s2.len, ptr %context) unnamed_addr #1 {
 entry:
   %0 = call i1 @runtime.stringLess(ptr %s2.data, i32 %s2.len, ptr %s1.data, i32 %s1.len, ptr undef) #3
   ret i1 %0
 }
-
-declare i1 @runtime.stringLess(ptr readonly, i32, ptr readonly, i32, ptr) #0
 
 ; Function Attrs: nounwind
 define hidden i8 @main.stringLookup(ptr readonly %s.data, i32 %s.len, i8 %x, ptr %context) unnamed_addr #1 {

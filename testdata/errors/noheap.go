@@ -8,6 +8,9 @@ func main() {
 	var sep [20]byte
 	bytes.Index(data[:], sep[:])
 
+	// Byte slice string ordered comparisons must not allocate either.
+	lessThan(data[:], sep[:])
+
 	// This object is optimized away, and won't cause a linker failure.
 	var a int
 	add(&a)
@@ -44,6 +47,11 @@ func add(n *int) {
 	*n++
 }
 
+//go:noinline
+func lessThan(a, b []byte) bool {
+	return string(a) < string(b)
+}
+
 func sum(slice []int) (result int) {
 	for n := range slice {
 		result += n
@@ -70,6 +78,6 @@ func escape(n *int) {
 	println(n2)
 }
 
-// ERROR: noheap.go:16: object allocated on the heap in //go:noheap function
-// ERROR: noheap.go:26: object allocated on the heap in //go:noheap function
-// ERROR: noheap.go:36: object allocated on the heap in //go:noheap function
+// ERROR: noheap.go:19: object allocated on the heap in //go:noheap function
+// ERROR: noheap.go:29: object allocated on the heap in //go:noheap function
+// ERROR: noheap.go:39: object allocated on the heap in //go:noheap function

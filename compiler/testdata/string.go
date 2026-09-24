@@ -36,6 +36,26 @@ func byteSliceStringCompareSideEffects(s1, s2 []byte) bool {
 	return string(s1) == string(mutateBytes(s2))
 }
 
+func byteSliceStringCompareLess(s1, s2 []byte) bool {
+	return string(s1) < string(s2)
+}
+
+func byteSliceStringCompareLessEqual(s1, s2 []byte) bool {
+	return string(s1) <= string(s2)
+}
+
+func byteSliceStringCompareGreater(s1, s2 []byte) bool {
+	return string(s1) > string(s2)
+}
+
+func byteSliceStringCompareGreaterEqual(s1, s2 []byte) bool {
+	return string(s1) >= string(s2)
+}
+
+func byteSliceStringCompareLessSideEffects(s1, s2 []byte) bool {
+	return string(s1) < string(mutateBytes(s2))
+}
+
 //go:noinline
 func mutateBytes(s []byte) []byte {
 	s[0]++

@@ -17,3 +17,10 @@
 7 176
 8 120
 string from runes: abcü¢€𐍈°x
+a < b: true
+a <= b: true
+a > b: false
+a >= b: false
+a < a: false
+a <= a: true
+mutated a < c: true

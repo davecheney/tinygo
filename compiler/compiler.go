@@ -2972,7 +2972,12 @@ func isByteSliceToStringComparison(expr *ssa.Convert) bool {
 			return false
 		}
 	}
-	if binop == nil || binop.Op != token.EQL && binop.Op != token.NEQ {
+	if binop == nil {
+		return false
+	}
+	switch binop.Op {
+	case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
+	default:
 		return false
 	}
 
