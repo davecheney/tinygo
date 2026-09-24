@@ -669,6 +669,8 @@ func runGC() (freeBytes uintptr) {
 // markRoots reads all pointers from start to end (exclusive) and if they look
 // like a heap pointer and are unmarked, marks them and scans that object as
 // well (recursively). The starting address must be valid and aligned.
+//
+//go:noheap
 func markRoots(start, end uintptr) {
 	if gcDebug {
 		println("mark from", start, "to", end, int(end-start))
@@ -688,6 +690,8 @@ func markRoots(start, end uintptr) {
 
 // scanConservative scans all possible pointer locations in a range and marks referenced heap allocations.
 // The starting address must be valid and pointer-aligned.
+//
+//go:noheap
 func scanConservative(addr, len uintptr) {
 	for len >= unsafe.Sizeof(addr) {
 		root := *(*uintptr)(unsafe.Pointer(addr))
@@ -705,6 +709,8 @@ func markCurrentGoroutineStack(sp uintptr) {
 }
 
 // finishMark finishes the marking process by scanning all heap objects on scanList.
+//
+//go:noheap
 func finishMark() {
 	for {
 		// Remove an object from the scan list.
@@ -741,6 +747,8 @@ func finishMark() {
 }
 
 // mark a GC root at the address addr.
+//
+//go:noheap
 func markRoot(addr, root uintptr) {
 	// Find the heap block corresponding to the root.
 	if !isOnHeap(root) {
@@ -775,6 +783,8 @@ func markRoot(addr, root uintptr) {
 }
 
 // Sweep goes through all memory and frees unmarked memory.
+//
+//go:noheap
 func sweep() uintptr {
 	// Discard the old free ranges list.
 	freeRanges = nil
