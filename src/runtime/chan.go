@@ -79,6 +79,8 @@ type chanQueue struct {
 // been initialized already.
 // This function must be called with interrupts disabled and the channel lock
 // held.
+//
+//go:noheap
 func (q *chanQueue) push(node *channelOp) {
 	node.next = q.first
 	q.first = node
@@ -88,6 +90,8 @@ func (q *chanQueue) push(node *channelOp) {
 // waiting (for example, when they're part of a select operation) will be
 // skipped.
 // This function must be called with interrupts disabled.
+//
+//go:noheap
 func (q *chanQueue) pop(chanOp uint32) *channelOp {
 	for {
 		if q.first == nil {
@@ -115,6 +119,8 @@ func (q *chanQueue) pop(chanOp uint32) *channelOp {
 // queue. If there are multiple, only one will be removed.
 // This function must be called with interrupts disabled and the channel lock
 // held.
+//
+//go:noheap
 func (q *chanQueue) remove(remove *channelOp) {
 	n := &q.first
 	for *n != nil {
@@ -184,6 +190,8 @@ func chanCap(c *channel) int {
 // Push the value to the channel buffer array, for a send operation.
 // This function may only be called when interrupts are disabled, the channel is
 // locked and it is known there is space available in the buffer.
+//
+//go:noheap
 func (ch *channel) bufferPush(value unsafe.Pointer) {
 	elemAddr := unsafe.Add(ch.buf, ch.bufHead*ch.elementSize)
 	ch.bufLen++
@@ -199,6 +207,8 @@ func (ch *channel) bufferPush(value unsafe.Pointer) {
 // a receive operation.
 // This function may only be called when interrupts are disabled, the channel is
 // locked and it is known there is at least one value available in the buffer.
+//
+//go:noheap
 func (ch *channel) bufferPop(value unsafe.Pointer) {
 	elemAddr := unsafe.Add(ch.buf, ch.bufTail*ch.elementSize)
 	ch.bufLen--
@@ -216,6 +226,8 @@ func (ch *channel) bufferPop(value unsafe.Pointer) {
 // Try to proceed with this send operation without blocking, and return whether
 // the send succeeded. Schedule a returned task only after releasing all locks.
 // Interrupts must be disabled and the channel lock must be held.
+//
+//go:noheap
 func (ch *channel) trySend(value unsafe.Pointer) (sent bool, wake *task.Task) {
 	// To make sure we send values in the correct order, we can only send
 	// directly to a receiver when there are no values in the buffer.
@@ -295,6 +307,8 @@ func chanSend(ch *channel, value unsafe.Pointer, op *channelOp) {
 // Try to proceed with this receive operation without blocking, and return
 // whether it succeeded. Schedule a returned task only after releasing all locks.
 // Interrupts must be disabled and the channel lock must be held.
+//
+//go:noheap
 func (ch *channel) tryRecv(value unsafe.Pointer) (received, ok bool, wake *task.Task) {
 	// To make sure we keep the values in the channel in the correct order, we
 	// first have to read values from the buffer before we can look at the
@@ -502,6 +516,8 @@ func chanClose(ch *channel) {
 var chanSelectLock task.PMutex
 
 // Lock all channels (taking care to skip duplicate channels).
+//
+//go:noheap
 func lockAllStates(states []chanSelectState) {
 	if !hasParallelism {
 		return
@@ -515,6 +531,8 @@ func lockAllStates(states []chanSelectState) {
 }
 
 // Unlock all channels (taking care to skip duplicate channels).
+//
+//go:noheap
 func unlockAllStates(states []chanSelectState) {
 	if !hasParallelism {
 		return
