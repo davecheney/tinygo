@@ -24,6 +24,24 @@ func stringCompareUnequal(s1, s2 string) bool {
 	return s1 != s2
 }
 
+func byteSliceStringCompareEqual(s1, s2 []byte) bool {
+	return string(s1) == string(s2)
+}
+
+func byteSliceStringCompareUnequal(s1, s2 []byte) bool {
+	return string(s1) != string(s2)
+}
+
+func byteSliceStringCompareSideEffects(s1, s2 []byte) bool {
+	return string(s1) == string(mutateBytes(s2))
+}
+
+//go:noinline
+func mutateBytes(s []byte) []byte {
+	s[0]++
+	return s
+}
+
 func stringCompareLarger(s1, s2 string) bool {
 	return s1 > s2
 }
