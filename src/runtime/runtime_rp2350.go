@@ -40,6 +40,8 @@ func enableSIOFifoInterruptCore1() {
 
 // The SIO FIFO IRQ is the logical OR of the VLD, WOF and ROE status bits, so
 // it can fire with no data to read. RP2350 datasheet section 3.1.5.
+//
+//go:noheap
 func handleSIOFifoInterrupt(intr interrupt.Interrupt) {
 	rp.SIO.FIFO_ST.Set(rp.SIO_FIFO_ST_ROE | rp.SIO_FIFO_ST_WOF)
 	if !multicore_fifo_rvalid() {
