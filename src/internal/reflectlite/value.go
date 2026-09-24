@@ -1121,7 +1121,7 @@ func (v Value) MapKeys() []Value {
 }
 
 //go:linkname hashmapStringGet runtime.hashmapStringGet
-func hashmapStringGet(m unsafe.Pointer, key string, value unsafe.Pointer, valueSize uintptr) bool
+func hashmapStringGet(m, key, value unsafe.Pointer, valueSize uintptr) bool
 
 //go:linkname hashmapBinaryGet runtime.hashmapBinaryGet
 func hashmapBinaryGet(m unsafe.Pointer, key, value unsafe.Pointer, valueSize uintptr) bool
@@ -1177,7 +1177,7 @@ func (v Value) MapIndex(key Value) Value {
 	elem := New(elemType)
 
 	if vkey.Kind() == String {
-		if ok := hashmapStringGet(v.pointer(), *(*string)(key.value), elem.value, elemType.Size()); !ok {
+		if ok := hashmapStringGet(v.pointer(), key.value, elem.value, elemType.Size()); !ok {
 			return Value{}
 		}
 		return elem.Elem()
@@ -2131,7 +2131,7 @@ func (v Value) Grow(n int) {
 }
 
 //go:linkname hashmapStringSet runtime.hashmapStringSet
-func hashmapStringSet(m unsafe.Pointer, key string, value unsafe.Pointer)
+func hashmapStringSet(m, key, value unsafe.Pointer)
 
 //go:linkname hashmapBinarySet runtime.hashmapBinarySet
 func hashmapBinarySet(m unsafe.Pointer, key, value unsafe.Pointer)
@@ -2140,7 +2140,7 @@ func hashmapBinarySet(m unsafe.Pointer, key, value unsafe.Pointer)
 func hashmapGenericSet(m unsafe.Pointer, key, value unsafe.Pointer)
 
 //go:linkname hashmapStringDelete runtime.hashmapStringDelete
-func hashmapStringDelete(m unsafe.Pointer, key string)
+func hashmapStringDelete(m, key unsafe.Pointer)
 
 //go:linkname hashmapBinaryDelete runtime.hashmapBinaryDelete
 func hashmapBinaryDelete(m unsafe.Pointer, key unsafe.Pointer)
@@ -2183,7 +2183,7 @@ func (v Value) SetMapIndex(key, elem Value) {
 
 	if vkey.Kind() == String {
 		if del {
-			hashmapStringDelete(v.pointer(), *(*string)(key.value))
+			hashmapStringDelete(v.pointer(), key.value)
 		} else {
 			var elemptr unsafe.Pointer
 			if elem.isIndirect() || elem.typecode.Size() > unsafe.Sizeof(uintptr(0)) {
@@ -2191,7 +2191,7 @@ func (v Value) SetMapIndex(key, elem Value) {
 			} else {
 				elemptr = unsafe.Pointer(&elem.value)
 			}
-			hashmapStringSet(v.pointer(), *(*string)(key.value), elemptr)
+			hashmapStringSet(v.pointer(), key.value, elemptr)
 		}
 
 	} else if vkey.isBinary() {
