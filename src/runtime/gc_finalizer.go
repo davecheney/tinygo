@@ -75,6 +75,8 @@ var finalizerBits []byte
 
 // finalizerBitsShortfall returns the required bitmap size or zero.
 // Call it with gcLock held and release the lock before allocation.
+//
+//go:noheap
 func finalizerBitsShortfall() uintptr {
 	need := (uintptr(endBlock) + 7) / 8
 	if uintptr(len(finalizerBits)) >= need {
@@ -85,6 +87,8 @@ func finalizerBitsShortfall() uintptr {
 
 // adoptFinalizerBits installs a wider bitmap while gcLock is held.
 // It accepts a stale size because the heap can grow during allocation.
+//
+//go:noheap
 func adoptFinalizerBits(buf []byte) {
 	if len(buf) <= len(finalizerBits) {
 		return
@@ -93,8 +97,10 @@ func adoptFinalizerBits(buf []byte) {
 	finalizerBits = buf
 }
 
+//go:noheap
 func finalizerBitIndex(addr uintptr) uintptr { return uintptr(blockFromAddr(addr)) }
 
+//go:noheap
 func finalizerBitGet(addr uintptr) bool {
 	i := finalizerBitIndex(addr)
 	if i/8 >= uintptr(len(finalizerBits)) {
@@ -105,6 +111,7 @@ func finalizerBitGet(addr uintptr) bool {
 	return finalizerBits[i/8]&(1<<(i%8)) != 0
 }
 
+//go:noheap
 func finalizerBitSet(addr uintptr) {
 	i := finalizerBitIndex(addr)
 	if i/8 >= uintptr(len(finalizerBits)) {
@@ -113,6 +120,7 @@ func finalizerBitSet(addr uintptr) {
 	finalizerBits[i/8] |= 1 << (i % 8)
 }
 
+//go:noheap
 func finalizerBitClear(addr uintptr) {
 	i := finalizerBitIndex(addr)
 	if i/8 >= uintptr(len(finalizerBits)) {
@@ -254,6 +262,8 @@ func registerFinalizer(addr uintptr, fn interface{}) {
 // scanFinalizers detects finalizable objects that became unreachable in the
 // current GC cycle and queues their finalizers. It must be called under gcLock,
 // after marking is complete and before sweep frees anything.
+//
+//go:noheap
 func scanFinalizers() {
 	// Reset pressure at the start of every collection, even if no finalizer runs.
 	finalizersSinceGC = 0

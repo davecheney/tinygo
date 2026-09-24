@@ -201,6 +201,26 @@ func TestBuild(t *testing.T) {
 			}
 		})
 
+		// Keep collector and finalizer helpers allocation-free at -opt=0,
+		// where escaping locals are most likely to become heap allocations.
+		t.Run("opt=0-gc-noheap-cortex-m-qemu", func(t *testing.T) {
+			t.Parallel()
+			opts := optionsFromTarget("cortex-m-qemu", sema)
+			opts.Opt = "0"
+			config, err := builder.NewConfig(&opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, path := range []string{"testdata/gc.go", "testdata/finalizerinvariants.go"} {
+				err = Build(path, t.TempDir()+"/gc-noheap", config)
+				if err != nil {
+					w := &bytes.Buffer{}
+					diagnostics.CreateDiagnostics(err).WriteTo(w, "")
+					t.Fatal(w.String())
+				}
+			}
+		})
+
 		t.Run("gc=none-runtime-panic", func(t *testing.T) {
 			t.Parallel()
 			opts := optionsFromTarget("cortex-m-qemu", sema)
