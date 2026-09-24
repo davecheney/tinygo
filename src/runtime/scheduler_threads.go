@@ -51,6 +51,7 @@ func goexit() {
 	task.Goexit()
 }
 
+//go:noheap
 func scheduleTask(t *task.Task) {
 	synctestTaskWake(t)
 	scheduleTaskNoWake(t)
@@ -115,6 +116,7 @@ func timerRunner() {
 	}
 }
 
+//go:noheap
 func addTimer(tim *timerNode) {
 	timerQueueLock.Lock()
 
@@ -133,6 +135,8 @@ func addTimer(tim *timerNode) {
 
 // reAddTimer finishes firing a timer. It re-adds periodic timers unless they
 // were stopped or reset while the callback was running.
+//
+//go:noheap
 func reAddTimer(tn *timerNode) {
 	timerQueueLock.Lock()
 
@@ -162,6 +166,7 @@ func reAddTimer(tn *timerNode) {
 	timerQueueLock.Unlock()
 }
 
+//go:noheap
 func removeTimer(tim *timer) *timerNode {
 	timerQueueLock.Lock()
 	n := timerQueueRemove(tim)

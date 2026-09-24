@@ -27,6 +27,7 @@ func scheduleLogChan(msg string, ch *channel, t *task.Task) {
 	}
 }
 
+//go:noheap
 func timerQueueAdd(tn *timerNode) {
 	q := &timerQueue
 	for ; *q != nil; q = &(*q).next {
@@ -39,6 +40,7 @@ func timerQueueAdd(tn *timerNode) {
 	*q = tn
 }
 
+//go:noheap
 func timerQueueRemove(t *timer) *timerNode {
 	for q := &timerQueue; *q != nil; q = &(*q).next {
 		if (*q).timer == t {
@@ -61,6 +63,8 @@ var firingTimers *timerNode
 
 // firingTimersAdd marks the given timer node as currently firing. The caller
 // must hold the scheduler's timer lock.
+//
+//go:noheap
 func firingTimersAdd(tn *timerNode) {
 	tn.stopped = false
 	tn.firingNext = firingTimers
@@ -69,6 +73,8 @@ func firingTimersAdd(tn *timerNode) {
 
 // firingTimersRemove removes the given timer node from the firing list. The
 // caller must hold the scheduler's timer lock.
+//
+//go:noheap
 func firingTimersRemove(tn *timerNode) {
 	for q := &firingTimers; *q != nil; q = &(*q).firingNext {
 		if *q == tn {
@@ -82,6 +88,8 @@ func firingTimersRemove(tn *timerNode) {
 // firingTimerStop marks a currently-firing timer as stopped, so that its
 // callback will not re-add it to the queue. It returns whether the timer is
 // currently firing. The caller must hold the scheduler's timer lock.
+//
+//go:noheap
 func firingTimerStop(tim *timer) bool {
 	for tn := firingTimers; tn != nil; tn = tn.firingNext {
 		if tn.timer == tim {
