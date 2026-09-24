@@ -419,6 +419,11 @@ func (t *RawType) Elem() Type {
 	return t.elem()
 }
 
+// RawElem is like Elem but does not convert the result to an interface.
+func (t *RawType) RawElem() *RawType {
+	return t.elem()
+}
+
 func (t *RawType) elem() *RawType {
 	if tag := t.ptrtag(); tag != 0 {
 		return (*RawType)(unsafe.Add(unsafe.Pointer(t), -1))
@@ -459,6 +464,22 @@ func (t *RawType) Field(i int) StructField {
 		Offset:    field.Offset,
 		Index:     []int{i},
 	}
+}
+
+// RawField returns the type and offset of a struct field without allocations.
+func (t *RawType) RawField(i int) (*RawType, uintptr) {
+	if t.Kind() != Struct {
+		panic(errTypeField)
+	}
+	descriptor := (*structType)(unsafe.Pointer(t.underlying()))
+	if uint(i) >= uint(descriptor.numField) {
+		panic("reflect: field index out of range")
+	}
+
+	field := (*structField)(unsafe.Add(unsafe.Pointer(&descriptor.fields[0]), uintptr(i)*unsafe.Sizeof(structField{})))
+	data := unsafe.Add(field.data, 1)
+	offset, _ := uvarint32(unsafe.Slice((*byte)(data), maxVarintLen32))
+	return field.fieldType, uintptr(offset)
 }
 
 func rawStructFieldFromPointer(descriptor *structType, fieldType *RawType, data unsafe.Pointer, flagsByte uint8, name string, offset uint32) rawStructField {

@@ -675,9 +675,7 @@ func hashmapMakeGeneric(keySize, valueSize uintptr, sizeHint uintptr,
 	}
 }
 
-// hashmapMakeReflect creates a hashmap for reflect.MakeMapWithSize using
-// closures that reconstruct interface{} values from raw key bytes,
-// delegating to hashmapInterfaceHash for hashing and == for equality.
+// hashmapMakeReflect creates a hashmap for reflect.MakeMapWithSize.
 func hashmapMakeReflect(keySize, valueSize, sizeHint uintptr, typeInfo, keyType unsafe.Pointer) *hashmap {
 	t := (*reflectlite.RawType)(keyType)
 	if t.Kind() == reflectlite.Interface {
@@ -687,7 +685,7 @@ func hashmapMakeReflect(keySize, valueSize, sizeHint uintptr, typeInfo, keyType 
 			hashmapInterfacePtrHash, hashmapInterfaceEqual)
 	}
 	keyHash := func(key unsafe.Pointer, size, seed uintptr) uint32 {
-		return hashmapInterfaceHash(rawToInterface(t, key), seed)
+		return hashmapRawTypeHash(t, key, seed)
 	}
 	keyEqual := func(x, y unsafe.Pointer, n uintptr) bool {
 		return rawToInterface(t, x) == rawToInterface(t, y)
@@ -716,87 +714,75 @@ func hashmapStringEqual(x, y unsafe.Pointer, n uintptr) bool {
 	return *(*string)(x) == *(*string)(y)
 }
 
+//go:noheap
 func hashmapStringHash(s string, seed uintptr) uint32 {
-	_s := (*_string)(unsafe.Pointer(&s))
-	return hash32(unsafe.Pointer(_s.ptr), uintptr(_s.length), seed)
+	return hash32(unsafe.Pointer(unsafe.StringData(s)), uintptr(len(s)), seed)
 }
 
+//go:noheap
 func hashmapStringPtrHash(sptr unsafe.Pointer, size uintptr, seed uintptr) uint32 {
 	_s := *(*_string)(sptr)
 	return hash32(unsafe.Pointer(_s.ptr), uintptr(_s.length), seed)
 }
 
-func hashmapStringSet(m *hashmap, key string, value unsafe.Pointer) {
+func hashmapStringSet(m *hashmap, key, value unsafe.Pointer) {
 	if m == nil {
 		nilMapPanic()
 	}
-	hash := hashmapStringHash(key, m.seed)
-	hashmapSet(m, unsafe.Pointer(&key), value, hash)
+	hash := hashmapStringPtrHash(key, m.keySize, m.seed)
+	hashmapSet(m, key, value, hash)
 }
 
-func hashmapStringGet(m *hashmap, key string, value unsafe.Pointer, valueSize uintptr) bool {
+//go:noheap
+func hashmapStringGet(m *hashmap, key, value unsafe.Pointer, valueSize uintptr) bool {
 	if m == nil {
 		memzero(value, uintptr(valueSize))
 		return false
 	}
-	hash := hashmapStringHash(key, m.seed)
-	return hashmapGet(m, unsafe.Pointer(&key), value, valueSize, hash)
+	hash := hashmapStringPtrHash(key, m.keySize, m.seed)
+	return hashmapGet(m, key, value, valueSize, hash)
 }
 
-func hashmapStringDelete(m *hashmap, key string) {
+//go:noheap
+func hashmapStringDelete(m *hashmap, key unsafe.Pointer) {
 	if m == nil {
 		return
 	}
-	hash := hashmapStringHash(key, m.seed)
-	hashmapDelete(m, unsafe.Pointer(&key), hash)
+	hash := hashmapStringPtrHash(key, m.keySize, m.seed)
+	hashmapDelete(m, key, hash)
 }
 
 // Hashmap with interface keys (for everything else).
 
-// This is a method that is intentionally unexported in the reflect package. It
-// is identical to the Interface() method call, except it doesn't check whether
-// a field is exported and thus allows circumventing the type system.
-// The hash function needs it as it also needs to hash unexported struct fields.
-//
-//go:linkname valueInterfaceUnsafe internal/reflectlite.valueInterfaceUnsafe
-func valueInterfaceUnsafe(v reflectlite.Value) interface{}
-
+//go:noheap
 func hashmapFloat32Hash(ptr unsafe.Pointer, seed uintptr) uint32 {
 	f := *(*uint32)(ptr)
 	if f == 0x80000000 {
 		// convert -0 to 0 for hashing
-		f = 0
+		return hash32(unsafe.Pointer(unsafe.StringData(hashmapZeroFloat)), 4, seed)
 	}
-	return hash32(unsafe.Pointer(&f), 4, seed)
+	return hash32(ptr, 4, seed)
 }
 
+//go:noheap
 func hashmapFloat64Hash(ptr unsafe.Pointer, seed uintptr) uint32 {
 	f := *(*uint64)(ptr)
 	if f == 0x8000000000000000 {
 		// convert -0 to 0 for hashing
-		f = 0
+		return hash32(unsafe.Pointer(unsafe.StringData(hashmapZeroFloat)), 8, seed)
 	}
-	return hash32(unsafe.Pointer(&f), 8, seed)
+	return hash32(ptr, 8, seed)
 }
 
-func hashmapInterfaceHash(itf interface{}, seed uintptr) uint32 {
-	x := reflectlite.ValueOf(itf)
-	if x.RawType() == nil {
-		return 0 // nil interface
-	}
+const hashmapZeroFloat = "\x00\x00\x00\x00\x00\x00\x00\x00"
 
-	value := (*_interface)(unsafe.Pointer(&itf)).value
-	ptr := value
-	if x.RawType().Size() <= unsafe.Sizeof(uintptr(0)) {
-		// Value fits in pointer, so it's directly stored in the pointer.
-		ptr = unsafe.Pointer(&value)
-	}
-
-	switch x.RawType().Kind() {
+//go:noheap
+func hashmapRawTypeHash(t *reflectlite.RawType, ptr unsafe.Pointer, seed uintptr) uint32 {
+	switch t.Kind() {
 	case reflectlite.Int, reflectlite.Int8, reflectlite.Int16, reflectlite.Int32, reflectlite.Int64:
-		return hash32(ptr, x.RawType().Size(), seed)
+		return hash32(ptr, t.Size(), seed)
 	case reflectlite.Bool, reflectlite.Uint, reflectlite.Uint8, reflectlite.Uint16, reflectlite.Uint32, reflectlite.Uint64, reflectlite.Uintptr:
-		return hash32(ptr, x.RawType().Size(), seed)
+		return hash32(ptr, t.Size(), seed)
 	case reflectlite.Float32:
 		// It should be possible to just has the contents. However, NaN != NaN
 		// so if you're using lots of NaNs as map keys (you shouldn't) then hash
@@ -813,35 +799,77 @@ func hashmapInterfaceHash(itf interface{}, seed uintptr) uint32 {
 		rptr, iptr := ptr, unsafe.Add(ptr, 8)
 		return hashmapFloat64Hash(rptr, seed) ^ hashmapFloat64Hash(iptr, seed)
 	case reflectlite.String:
-		return hashmapStringHash(x.String(), seed)
+		return hashmapStringHash(*(*string)(ptr), seed)
 	case reflectlite.Chan, reflectlite.Ptr, reflectlite.UnsafePointer:
 		// It might seem better to just return the pointer, but that won't
 		// result in an evenly distributed hashmap. Instead, hash the pointer
 		// like most other types.
-		return hash32(ptr, x.RawType().Size(), seed)
+		return hash32(ptr, t.Size(), seed)
 	case reflectlite.Array:
 		var hash uint32
-		for i := 0; i < x.Len(); i++ {
-			hash = (hash * 31) ^ hashmapInterfaceHash(valueInterfaceUnsafe(x.Index(i)), seed)
+		elem := t.RawElem()
+		for i := 0; i < t.Len(); i++ {
+			hash = (hash * 31) ^ hashmapRawTypeHash(elem, unsafe.Add(ptr, uintptr(i)*elem.Size()), seed)
 		}
 		return hash
 	case reflectlite.Struct:
 		var hash uint32
-		for i := 0; i < x.NumField(); i++ {
-			hash = (hash * 31) ^ hashmapInterfaceHash(valueInterfaceUnsafe(x.Field(i)), seed)
+		for i := 0; i < t.NumField(); i++ {
+			fieldType, offset := t.RawField(i)
+			hash = (hash * 31) ^ hashmapRawTypeHash(fieldType, unsafe.Add(ptr, offset), seed)
 		}
 		return hash
+	case reflectlite.Interface:
+		return hashmapInterfacePtrHash(ptr, t.Size(), seed)
 	default:
 		runtimePanic(errUncomparable)
 		return 0 // unreachable
 	}
 }
 
-func hashmapInterfacePtrHash(iptr unsafe.Pointer, size uintptr, seed uintptr) uint32 {
-	_i := *(*interface{})(iptr)
-	return hashmapInterfaceHash(_i, seed)
+//go:noheap
+func hashmapInterfacePtrHash(iptr unsafe.Pointer, _ uintptr, seed uintptr) uint32 {
+	i := (*_interface)(iptr)
+	t := (*reflectlite.RawType)(i.typecode)
+	if t == nil {
+		return 0
+	}
+
+	ptr := i.value
+	if t.Size() <= unsafe.Sizeof(uintptr(0)) {
+		ptr = unsafe.Add(iptr, unsafe.Sizeof(uintptr(0)))
+	}
+	return hashmapRawTypeHash(t, ptr, seed)
 }
 
-func hashmapInterfaceEqual(x, y unsafe.Pointer, n uintptr) bool {
-	return *(*interface{})(x) == *(*interface{})(y)
+//go:noheap
+func hashmapInterfaceEqual(x, y unsafe.Pointer, _ uintptr) bool {
+	xi := (*_interface)(x)
+	yi := (*_interface)(y)
+	if xi.typecode != yi.typecode {
+		return false
+	}
+	t := (*reflectlite.RawType)(xi.typecode)
+	if t == nil {
+		return true
+	}
+
+	xptr := xi.value
+	yptr := yi.value
+	if t.Size() <= unsafe.Sizeof(uintptr(0)) {
+		xptr = unsafe.Add(x, unsafe.Sizeof(uintptr(0)))
+		yptr = unsafe.Add(y, unsafe.Sizeof(uintptr(0)))
+	}
+	switch t.Kind() {
+	case reflectlite.Float32:
+		return *(*float32)(xptr) == *(*float32)(yptr)
+	case reflectlite.Float64:
+		return *(*float64)(xptr) == *(*float64)(yptr)
+	case reflectlite.Complex64:
+		return *(*complex64)(xptr) == *(*complex64)(yptr)
+	case reflectlite.Complex128:
+		return *(*complex128)(xptr) == *(*complex128)(yptr)
+	default:
+		return *(*interface{})(x) == *(*interface{})(y)
+	}
 }

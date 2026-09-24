@@ -164,8 +164,10 @@ func (b *builder) createMapLookup(keyType, valueType types.Type, m llvm.Value, k
 	keyType = keyType.Underlying()
 	if t, ok := keyType.(*types.Basic); ok && t.Info()&types.IsString != 0 {
 		// key is a string
-		params := []llvm.Value{m, b.getValue(key, getPos(key)), mapValueAlloca, mapValueSize}
+		mapKey := b.getValueStorage(key, "hashmap.key")
+		params := []llvm.Value{m, mapKey.ptr, mapValueAlloca, mapValueSize}
 		commaOkValue = b.createRuntimeCall("hashmapStringGet", params, "")
+		b.endValueStorage(mapKey)
 	} else {
 		// Key stored at actual type: either binary-comparable or with
 		// compiler-generated hash/equal.
@@ -194,8 +196,10 @@ func (b *builder) createMapUpdate(keyType types.Type, m llvm.Value, key, value s
 	keyType = keyType.Underlying()
 	if t, ok := keyType.(*types.Basic); ok && t.Info()&types.IsString != 0 {
 		// key is a string
-		params := []llvm.Value{m, b.getValue(key, getPos(key)), storedValue.ptr}
+		keyStorage := b.getValueStorage(key, "hashmap.key")
+		params := []llvm.Value{m, keyStorage.ptr, storedValue.ptr}
 		b.createRuntimeInvoke("hashmapStringSet", params, "")
+		b.endValueStorage(keyStorage)
 	} else {
 		// Key stored at actual type.
 		keyStorage := b.getValueStorage(key, "hashmap.key")
@@ -216,8 +220,11 @@ func (b *builder) createMapDelete(keyType types.Type, m, key llvm.Value, pos tok
 	keyType = keyType.Underlying()
 	if t, ok := keyType.(*types.Basic); ok && t.Info()&types.IsString != 0 {
 		// key is a string
-		params := []llvm.Value{m, key}
+		keyAlloca, keySize := b.createTemporaryAlloca(key.Type(), "hashmap.key")
+		b.CreateStore(key, keyAlloca)
+		params := []llvm.Value{m, keyAlloca}
 		b.createRuntimeCall("hashmapStringDelete", params, "")
+		b.emitLifetimeEnd(keyAlloca, keySize)
 		return nil
 	} else {
 		// Key stored at actual type.

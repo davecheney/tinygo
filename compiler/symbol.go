@@ -222,6 +222,14 @@ func (c *compilerContext) getFunction(fn *ssa.Function) (llvm.Type, llvm.Value) 
 	case "runtime.hashmapDelete":
 		// The key (param 2) is read-only and never captured.
 		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
+	case "runtime.hashmapStringSet":
+		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
+		llvmFn.AddAttributeAtIndex(3, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
+	case "runtime.hashmapStringGet":
+		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
+		llvmFn.AddAttributeAtIndex(3, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
+	case "runtime.hashmapStringDelete":
+		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
 	case "runtime.hashmapGenericSet":
 		// Same as hashmapBinarySet: key (param 2) and value (param 3) are
 		// not captured.
