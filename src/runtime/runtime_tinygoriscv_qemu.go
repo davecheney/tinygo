@@ -88,6 +88,7 @@ func main() {
 var handleInterruptASM [0]uintptr
 
 //export handleInterrupt
+//go:noheap
 func handleInterrupt() {
 	cause := riscv.MCAUSE.Get()
 	code := uint(cause &^ (1 << 31))
@@ -151,6 +152,8 @@ var (
 // The GC interrupted this core for the stop-the-world phase.
 // This function handles that, and only returns after the stop-the-world phase
 // ended.
+//
+//go:noheap
 func gcInterruptHandler(hartID uint32) {
 	// *only* enable the MSIE interrupt
 	savedMIE := riscv.MIE.Get()

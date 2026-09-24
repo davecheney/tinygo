@@ -223,6 +223,8 @@ var gcSignalWait volatile.Register8
 // The GC interrupted this core for the stop-the-world phase.
 // This function handles that, and only returns after the stop-the-world phase
 // ended.
+//
+//go:noheap
 func gcInterruptHandler(hartID uint32) {
 	// Let the GC know we're ready.
 	gcScanState.Add(1)

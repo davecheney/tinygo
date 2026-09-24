@@ -201,6 +201,33 @@ func TestBuild(t *testing.T) {
 			}
 		})
 
+		// Runtime interrupt and stop-the-world handlers execute outside normal
+		// goroutine context, so they must not allocate at -opt=0.
+		t.Run("opt=0-runtime-interrupt-noheap", func(t *testing.T) {
+			t.Parallel()
+			for _, tc := range []struct {
+				target string
+				path   string
+			}{
+				{"riscv-qemu", "testdata/timers.go"},
+				{"pico", "testdata/goroutines.go"},
+				{"pico2", "testdata/timers.go"},
+			} {
+				opts := optionsFromTarget(tc.target, sema)
+				opts.Opt = "0"
+				config, err := builder.NewConfig(&opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = Build(tc.path, t.TempDir()+"/runtime-interrupt-noheap", config)
+				if err != nil {
+					w := &bytes.Buffer{}
+					diagnostics.CreateDiagnostics(err).WriteTo(w, "")
+					t.Fatal(w.String())
+				}
+			}
+		})
+
 		t.Run("gc=none-runtime-panic", func(t *testing.T) {
 			t.Parallel()
 			opts := optionsFromTarget("cortex-m-qemu", sema)
