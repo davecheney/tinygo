@@ -89,8 +89,82 @@ func byteSliceStringCompareLiteral(a []byte) bool {
 	return string(a) == "abc"
 }
 
-func byteSliceStringCompareOrdered(a, b []byte) bool {
+func byteSliceStringCompareLess(a, b []byte) bool {
 	return string(a) < string(b)
+}
+
+func byteSliceStringCompareLessEqual(a, b []byte) bool {
+	return string(a) <= string(b)
+}
+
+func byteSliceStringCompareGreater(a, b []byte) bool {
+	return string(a) > string(b)
+}
+
+func byteSliceStringCompareGreaterEqual(a, b []byte) bool {
+	return string(a) >= string(b)
+}
+
+func byteSliceStringLessEscape(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s < t, s
+}
+
+func byteSliceStringLessEqualEscape(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s <= t, s
+}
+
+func byteSliceStringGreaterEscape(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s > t, s
+}
+
+func byteSliceStringGreaterEqualEscape(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s >= t, s
+}
+
+func byteSliceStringLessMutation(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s < string(b)
+}
+
+func byteSliceStringLessEqualMutation(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s <= string(b)
+}
+
+func byteSliceStringGreaterMutation(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s > string(b)
+}
+
+func byteSliceStringGreaterEqualMutation(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s >= string(b)
+}
+
+func byteSliceStringOrderReuse(a, b []byte) (bool, bool, bool, bool) {
+	s := string(a)
+	t := string(b)
+	return s < t, s <= t, s > t, s >= t
+}
+
+func byteSliceStringOrderLiteral(a []byte) bool {
+	return string(a) < "abc"
+}
+
+func byteSliceStringOrderSlices(a, b []byte) bool {
+	return string(a[:2]) >= string(b[:2])
 }
 
 type namedByte byte
@@ -104,6 +178,11 @@ func namedByteSliceStringCompare(a, b namedBytes) bool {
 
 func byteSliceNamedStringCompare(a, b []byte) bool {
 	return namedString(a) != namedString(b)
+}
+
+func namedByteSliceStringOrder(a, b namedBytes) (bool, bool, bool, bool) {
+	return string(a) < string(b), namedString(a) <= namedString(b),
+		string(a) > string(b), namedString(a) >= namedString(b)
 }
 
 func namedByteSliceToString(a namedBytes) string {

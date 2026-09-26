@@ -40,3 +40,64 @@ named: true false abc abc
 named runes: a€😀
 index: 7 -1
 index absent: -1
+order: 0 false true false true
+order reuse: 0 false true false true
+order: 1 false true false true
+order reuse: 1 false true false true
+order: 2 false true false true
+order reuse: 2 false true false true
+order: 3 true true false false
+order reuse: 3 true true false false
+order: 4 false false true true
+order reuse: 4 false false true true
+order: 5 false true false true
+order reuse: 5 false true false true
+order: 6 true true false false
+order reuse: 6 true true false false
+order: 7 false false true true
+order reuse: 7 false false true true
+order: 8 true true false false
+order reuse: 8 true true false false
+order: 9 false false true true
+order reuse: 9 false false true true
+order: 10 false false true true
+order reuse: 10 false false true true
+order: 11 true true false false
+order reuse: 11 true true false false
+order: 12 false false true true
+order reuse: 12 false false true true
+order: 13 true true false false
+order reuse: 13 true true false false
+order: 14 false false true true
+order reuse: 14 false false true true
+order: 15 false true false true
+order reuse: 15 false true false true
+order escape: < 97 false mbc xbc
+order mutation: < 97 false abc
+order escape: < 109 false mbc xbc
+order mutation: < 109 false mbc
+order escape: < 122 true mbc xbc
+order mutation: < 122 true zbc
+order escape: <= 97 false mbc xbc
+order mutation: <= 97 false abc
+order escape: <= 109 true mbc xbc
+order mutation: <= 109 true mbc
+order escape: <= 122 true mbc xbc
+order mutation: <= 122 true zbc
+order escape: > 97 true mbc xbc
+order mutation: > 97 true abc
+order escape: > 109 false mbc xbc
+order mutation: > 109 false mbc
+order escape: > 122 false mbc xbc
+order mutation: > 122 false zbc
+order escape: >= 97 true mbc xbc
+order mutation: >= 97 true abc
+order escape: >= 109 true mbc xbc
+order mutation: >= 109 true mbc
+order escape: >= 122 false mbc xbc
+order mutation: >= 122 false zbc
+named order: false true false true
+named order: true true false false
+named order: false false true true
+named order: true true false false
+named order: false false true true

@@ -95,7 +95,7 @@ func convertNamedRunes(a []myRune) string {
 //go:noinline
 func compareByteStringFallbacks(a, b []byte, s string) {
 	println("fallbacks:", string(a) == s, string(a) == "abc",
-		string(a[:2]) == string(b[:2]), string(a) < string(b))
+		string(a[:2]) == string(b[:2]), string(a) < s)
 	var x, y any = string(a), string(b)
 	a[0] = 'z'
 	println("boxed:", x == y, x.(string), y.(string))
@@ -161,11 +161,158 @@ func testByteSliceStringComparisons() {
 	println("index absent:", findBytes(data, sep))
 }
 
+//go:noinline
+func lessByteStrings(a, b []byte) bool {
+	return string(a) < string(b)
+}
+
+//go:noinline
+func lessEqualByteStrings(a, b []byte) bool {
+	return string(a) <= string(b)
+}
+
+//go:noinline
+func greaterByteStrings(a, b []byte) bool {
+	return string(a) > string(b)
+}
+
+//go:noinline
+func greaterEqualByteStrings(a, b []byte) bool {
+	return string(a) >= string(b)
+}
+
+//go:noinline
+func escapeLessByteString(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s < t, s
+}
+
+//go:noinline
+func escapeLessEqualByteString(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s <= t, s
+}
+
+//go:noinline
+func escapeGreaterByteString(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s > t, s
+}
+
+//go:noinline
+func escapeGreaterEqualByteString(a, b []byte) (bool, string) {
+	s := string(a)
+	t := string(b)
+	return s >= t, s
+}
+
+//go:noinline
+func mutateLessByteString(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s < string(b)
+}
+
+//go:noinline
+func mutateLessEqualByteString(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s <= string(b)
+}
+
+//go:noinline
+func mutateGreaterByteString(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s > string(b)
+}
+
+//go:noinline
+func mutateGreaterEqualByteString(a, b []byte, c byte) bool {
+	s := string(a)
+	b[0] = c
+	return s >= string(b)
+}
+
+//go:noinline
+func reuseOrderedByteStrings(a, b []byte) (bool, bool, bool, bool) {
+	s := string(a)
+	t := string(b)
+	return s < t, s <= t, s > t, s >= t
+}
+
+//go:noinline
+func orderNamedByteStrings(a, b myBytes) (bool, bool, bool, bool) {
+	return string(a) < string(b), myString(a) <= myString(b),
+		string(a) > string(b), myString(a) >= myString(b)
+}
+
+func testByteSliceStringOrdering() {
+	for i, tc := range []struct{ a, b []byte }{
+		{nil, nil},
+		{nil, []byte{}},
+		{[]byte{}, nil},
+		{nil, []byte{0}},
+		{[]byte{0}, nil},
+		{[]byte("abc"), []byte("abc")},
+		{[]byte("a"), []byte("aa")},
+		{[]byte("aa"), []byte("a")},
+		{[]byte("abc"), []byte("abd")},
+		{[]byte("abc"), []byte("abb")},
+		{[]byte{0, 'b'}, []byte{0, 'a'}},
+		{[]byte{0, 0x80}, []byte{0, 0xff}},
+		{[]byte{0, 0xff}, []byte{0, 0x80}},
+		{[]byte{0x7f}, []byte{0x80}},
+		{[]byte{0x80}, []byte{0x7f}},
+		{[]byte{0xff}, []byte{0xff}},
+	} {
+		println("order:", i, lessByteStrings(tc.a, tc.b), lessEqualByteStrings(tc.a, tc.b),
+			greaterByteStrings(tc.a, tc.b), greaterEqualByteStrings(tc.a, tc.b))
+		lt, le, gt, ge := reuseOrderedByteStrings(tc.a, tc.b)
+		println("order reuse:", i, lt, le, gt, ge)
+	}
+	for _, tc := range []struct {
+		name   string
+		escape func([]byte, []byte) (bool, string)
+		mutate func([]byte, []byte, byte) bool
+	}{
+		{"<", escapeLessByteString, mutateLessByteString},
+		{"<=", escapeLessEqualByteString, mutateLessEqualByteString},
+		{">", escapeGreaterByteString, mutateGreaterByteString},
+		{">=", escapeGreaterEqualByteString, mutateGreaterEqualByteString},
+	} {
+		for _, c := range []byte{'a', 'm', 'z'} {
+			a := []byte("mbc")
+			b := []byte{c, 'b', 'c'}
+			result, snapshot := tc.escape(a, b)
+			a[0] = 'x'
+			println("order escape:", tc.name, c, result, snapshot, string(a))
+			a[0] = 'm'
+			result = tc.mutate(a, a, c)
+			println("order mutation:", tc.name, c, result, string(a))
+		}
+	}
+	for _, tc := range []struct{ a, b myBytes }{
+		{nil, myBytes{}},
+		{myBytes{0, 0x80}, myBytes{0, 0xff}},
+		{myBytes{0, 0xff}, myBytes{0, 0x80}},
+		{myBytes{'a'}, myBytes{'a', 0}},
+		{myBytes{'a', 0}, myBytes{'a'}},
+	} {
+		lt, le, gt, ge := orderNamedByteStrings(tc.a, tc.b)
+		println("named order:", lt, le, gt, ge)
+	}
+}
+
 func main() {
 	testRangeString()
 	testStringToRunes()
 	testRunesToString([]rune{97, 98, 99, 252, 162, 8364, 66376, 176, 120})
 	testByteSliceStringCompareNil()
 	testByteSliceStringComparisons()
+	testByteSliceStringOrdering()
 	var _ = len([]byte(myString("foobar"))) // issue 1246
 }
