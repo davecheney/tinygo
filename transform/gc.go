@@ -164,34 +164,17 @@ func MakeGCStackSlots(mod llvm.Module) bool {
 			ptr := call.Operand(0)
 			call.EraseFromParentAsInstruction()
 
-			// Some trivial optimizations.
-			if ptr.IsAInstruction().IsNil() {
+			// ExtractValue, BitCast, Call, Load and IntToPtr all reach the
+			// default: either they create a new value that must be stored
+			// locally, or their original value may not be tracked. With more
+			// analysis a significant chunk of these could be optimized away.
+			if !needsStackSlot(ptr) {
 				continue
 			}
 			if _, ok := rooted[ptr]; ok {
 				continue
 			}
-			switch ptr.InstructionOpcode() {
-			case llvm.GetElementPtr:
-				// Check for all zero offsets.
-				// Sometimes LLVM rewrites bitcasts to zero-index GEPs, and we still need to track the GEP.
-				n := ptr.OperandsCount()
-				var hasOffset bool
-				for i := 1; i < n; i++ {
-					offset := ptr.Operand(i)
-					if offset.IsAConstantInt().IsNil() || offset.ZExtValue() != 0 {
-						hasOffset = true
-						break
-					}
-				}
-
-				if hasOffset {
-					// These values do not create new values: the values already
-					// existed locally in this function so must have been tracked
-					// already.
-					continue
-				}
-			case llvm.PHI:
+			if ptr.InstructionOpcode() == llvm.PHI {
 				// A phi gets a slot of its own because its value can change,
 				// so tracking an input instead is not enough. A phi that can
 				// be re-evaluated has its slot overwritten on the way round
@@ -200,25 +183,6 @@ func MakeGCStackSlots(mod llvm.Module) bool {
 				if blockInCycle(ptr.InstructionParent()) {
 					cyclicPHIs = append(cyclicPHIs, ptr)
 				}
-			case llvm.ExtractValue, llvm.BitCast:
-				// These instructions do not create new values, but their
-				// original value may not be tracked. So keep tracking them for
-				// now.
-				// With more analysis, it should be possible to optimize a
-				// significant chunk of these away.
-			case llvm.Call, llvm.Load, llvm.IntToPtr:
-				// These create new values so must be stored locally. But
-				// perhaps some of these can be fused when they actually refer
-				// to the same value.
-			default:
-				// Ambiguous. These instructions are uncommon, but perhaps could
-				// be optimized if needed.
-			}
-
-			if ptr := stripPointerCasts(ptr); !ptr.IsAAllocaInst().IsNil() {
-				// Allocas don't need to be tracked because they are allocated
-				// on the C stack which is scanned separately.
-				continue
 			}
 			rooted[ptr] = struct{}{}
 			pointers = append(pointers, ptr)
@@ -251,16 +215,11 @@ func MakeGCStackSlots(mod llvm.Module) bool {
 				expanded[phi] = struct{}{}
 				for i := 0; i < phi.IncomingCount(); i++ {
 					incoming := phi.IncomingValue(i)
-					if incoming.IsAInstruction().IsNil() {
-						// Constants and arguments cannot be given a slot here.
+					if !needsStackSlot(incoming) {
 						continue
 					}
 					if incoming.InstructionOpcode() == llvm.PHI {
 						worklist = append(worklist, incoming)
-					}
-					if stripped := stripPointerCasts(incoming); !stripped.IsAAllocaInst().IsNil() {
-						// Allocas live on the C stack, which is scanned separately.
-						continue
 					}
 					if _, ok := rooted[incoming]; ok {
 						continue
@@ -563,6 +522,40 @@ func blockInCycle(bb llvm.BasicBlock) bool {
 			}
 			seen[succ] = struct{}{}
 			worklist = append(worklist, succ)
+		}
+	}
+	return false
+}
+
+// needsStackSlot returns whether ptr needs a stack slot of its own, applying
+// the same test wherever a pointer is considered: both to the values named by
+// runtime.trackPointer and to the inputs of a phi reached from one.
+func needsStackSlot(ptr llvm.Value) bool {
+	if ptr.IsAInstruction().IsNil() {
+		// Constants, arguments and globals are not produced by this frame.
+		return false
+	}
+	if ptr.InstructionOpcode() == llvm.GetElementPtr && gepHasOffset(ptr) {
+		// A GEP with a non-zero offset does not create a new value: it derives
+		// from a pointer that already exists in this function and so has been
+		// tracked already.
+		return false
+	}
+	if !stripPointerCasts(ptr).IsAAllocaInst().IsNil() {
+		// Allocas are allocated on the C stack, which is scanned separately.
+		return false
+	}
+	return true
+}
+
+// gepHasOffset returns whether gep indexes anywhere other than offset zero.
+// LLVM sometimes rewrites a bitcast as an all-zero GEP, and those still need
+// tracking.
+func gepHasOffset(gep llvm.Value) bool {
+	for i, n := 1, gep.OperandsCount(); i < n; i++ {
+		offset := gep.Operand(i)
+		if offset.IsAConstantInt().IsNil() || offset.ZExtValue() != 0 {
+			return true
 		}
 	}
 	return false
