@@ -34,7 +34,12 @@ func makeFalseRoot(setRoot func(uintptr)) {
 }
 
 func expectCollected(setRoot func(uintptr)) {
-	makeFalseRoot(setRoot)
+	done := make(chan struct{})
+	go func() {
+		makeFalseRoot(setRoot)
+		close(done)
+	}()
+	<-done
 	runtime.GC()
 	for i := 0; i < 100000; i++ {
 		object := new(falseRootObject)
