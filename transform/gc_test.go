@@ -32,6 +32,8 @@ func TestGCStackSlotCounts(t *testing.T) {
 		"acyclicPhiIntoLoop": 3,
 		// Every input here does, and must keep them.
 		"nestedLoopPhis": 4,
+		// %elem is an interior pointer whose base already has a slot.
+		"loopPhiWithGEPInput": 3,
 	}
 
 	ctx := llvm.NewContext()
