@@ -21,3 +21,22 @@ true
 false
 true
 false
+compare: true false true
+compare: true false true
+compare: true false true
+compare: false true false
+compare: true false true
+compare: false true false
+compare: false true false
+compare: true false true
+escape: true abc zbc
+store: true abc zbc
+box: true abc zbc
+mutation: false abc zbc
+after: true false zbc
+fallbacks: true true true false
+boxed: true abc abc
+named: true false abc abc
+named runes: a€😀
+index: 7 -1
+index absent: -1

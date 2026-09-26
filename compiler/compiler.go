@@ -2972,7 +2972,7 @@ func isByteSliceToStringComparison(expr *ssa.Convert) bool {
 			return false
 		}
 	}
-	if binop == nil || binop.Op != token.EQL && binop.Op != token.NEQ {
+	if binop == nil || (binop.Op != token.EQL && binop.Op != token.NEQ) {
 		return false
 	}
 
@@ -2989,16 +2989,15 @@ func isByteSliceToStringComparison(expr *ssa.Convert) bool {
 	if x.Block() != block || y.Block() != block {
 		return false
 	}
-	var previous []ssa.Instruction
+	var previous [2]ssa.Instruction
 	for _, instr := range block.Instrs {
 		if _, ok := instr.(*ssa.DebugRef); ok {
 			continue
 		}
 		if instr == binop {
-			n := len(previous)
-			return n >= 2 && previous[n-2] == x && previous[n-1] == y
+			return previous[0] == x && previous[1] == y
 		}
-		previous = append(previous, instr)
+		previous[0], previous[1] = previous[1], instr
 	}
 	return false
 }
@@ -3605,7 +3604,7 @@ func (b *builder) createConvert(typeFrom, typeTo types.Type, value llvm.Value, p
 				}
 				return b.createRuntimeCall("stringFromUnicode", []llvm.Value{value}, ""), nil
 			case *types.Slice:
-				switch typeFrom.Elem().(*types.Basic).Kind() {
+				switch typeFrom.Elem().Underlying().(*types.Basic).Kind() {
 				case types.Byte:
 					return b.createRuntimeCall("stringFromBytes", []llvm.Value{value}, ""), nil
 				case types.Rune:
