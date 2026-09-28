@@ -201,6 +201,22 @@ func (c *compilerContext) getFunction(fn *ssa.Function) (llvm.Type, llvm.Value) 
 		// be modified.
 		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
 		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID("readonly"), 0))
+		// The destination buffer is only captured through the returned
+		// slice (it is either returned as-is or copied by sliceGrow).
+		if retOnly := llvmutil.CapturesAttr(c.ctx, llvmutil.CaptureNone, llvmutil.CaptureAll); !retOnly.IsNil() {
+			llvmFn.AddAttributeAtIndex(1, retOnly)
+		}
+	case "runtime.sliceGrow", "runtime.stringConcat":
+		// The input buffers are either returned (inside the returned
+		// slice/string aggregate) or only read via memmove/memcpy. LLVM does
+		// not infer return-only captures through aggregate return values, so
+		// add them here.
+		if retOnly := llvmutil.CapturesAttr(c.ctx, llvmutil.CaptureNone, llvmutil.CaptureAll); !retOnly.IsNil() {
+			llvmFn.AddAttributeAtIndex(1, retOnly)
+			if info.linkName == "runtime.stringConcat" {
+				llvmFn.AddAttributeAtIndex(3, retOnly) // y.ptr
+			}
+		}
 	case "runtime.stringFromBytes":
 		llvmFn.AddAttributeAtIndex(1, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
 		llvmFn.AddAttributeAtIndex(1, c.ctx.CreateEnumAttribute(llvm.AttributeKindID("readonly"), 0))

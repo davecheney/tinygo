@@ -26,7 +26,7 @@ func main() {
 	s4 := make([]byte, 300) // OUT: object size 300 exceeds maximum stack allocation size 256
 	readByteSlice(s4)
 
-	s5 := make([]int, 4) // OUT: escapes at line 30
+	s5 := make([]int, 4) // no escape: append result is unused
 	_ = append(s5, 5)
 
 	s6 := make([]int, 3)
