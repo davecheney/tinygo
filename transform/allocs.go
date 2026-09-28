@@ -100,12 +100,21 @@ func OptimizeAllocs(mod llvm.Module, printAllocs *regexp.Regexp, maxStackAlloc u
 
 		if at := valueEscapesAt(bitcast); !at.IsNil() {
 			if logAllocs {
+				allocPos := getPosition(heapalloc)
 				atPos := getPosition(at)
 				msg := "escapes at unknown line"
 				if atPos.Line != 0 {
-					msg = fmt.Sprintf("escapes at line %d", atPos.Line)
+					// The escaping instruction is frequently in a callee,
+					// which may live in a different file than the
+					// allocation. Name the file in that case: a bare line
+					// number would point into the wrong one.
+					if atPos.Filename != "" && atPos.Filename != allocPos.Filename {
+						msg = fmt.Sprintf("escapes at %s:%d", atPos.Filename, atPos.Line)
+					} else {
+						msg = fmt.Sprintf("escapes at line %d", atPos.Line)
+					}
 				}
-				logger(getPosition(heapalloc), msg)
+				logger(allocPos, msg)
 			}
 			continue
 		}

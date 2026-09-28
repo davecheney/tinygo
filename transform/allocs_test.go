@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/token"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -223,4 +224,44 @@ func TestAllocs2(t *testing.T) {
 		}
 	}
 	checkGolden(t, goldenFile+".cover", got.String())
+}
+
+// The escape site is often in a callee, which may live in a different file than
+// the allocation. Check that the reported reason names that file, and that the
+// common same-file case still reports a bare line number.
+func TestAllocsEscapePosition(t *testing.T) {
+	t.Parallel()
+
+	const path = "testdata/allocs-crossfile.ll"
+	ctx := llvm.NewContext()
+	defer ctx.Dispose()
+	ensureTestCacheFreshness(t, path)
+	buf, err := llvm.NewMemoryBufferFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod, err := ctx.ParseIR(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mod.Dispose()
+
+	reasons := make(map[string]string)
+	transform.OptimizeAllocs(mod, regexp.MustCompile("."), 256, func(pos token.Position, reason string) {
+		reasons[pos.String()] = reason
+	})
+
+	// The debug metadata in the input is hand-written, so check it is valid.
+	if err := llvm.VerifyModule(mod, llvm.PrintMessageAction); err != nil {
+		t.Fatal("IR verification failed")
+	}
+
+	for pos, want := range map[string]string{
+		filepath.Join("/src", "caller.go") + ":6:7":  "escapes at " + filepath.Join("/src", "callee.go") + ":21",
+		filepath.Join("/src", "caller.go") + ":11:7": "escapes at line 12",
+	} {
+		if got := reasons[pos]; got != want {
+			t.Errorf("%s: got %q, want %q", pos, got, want)
+		}
+	}
 }
