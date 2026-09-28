@@ -218,7 +218,8 @@ func valueEscapesAtImpl(value llvm.Value, allowReturn bool, visiting map[llvm.Va
 				return result
 			}
 		case llvm.ExtractValue:
-			if use.Type().TypeKind() == llvm.PointerTypeKind {
+			switch use.Type().TypeKind() {
+			case llvm.PointerTypeKind, llvm.StructTypeKind, llvm.ArrayTypeKind:
 				if !result.merge(valueEscapesAtImpl(use, allowReturn, visiting)) {
 					return result
 				}

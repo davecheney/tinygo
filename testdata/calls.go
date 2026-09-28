@@ -87,6 +87,42 @@ func main() {
 	if testDeferElse(false) != 0 {
 		println("else defer returned wrong value")
 	}
+
+	// A pointer returned as one of multiple return values must not be stack
+	// allocated.
+	err := multiReturnEscape()
+	clobberStack()
+	println("multiple return values:", err.(*multiReturnErr).x[1])
+}
+
+type multiReturnErr struct{ x [4]int }
+
+func (e *multiReturnErr) Error() string { return "multiReturnErr" }
+
+//go:noinline
+func wrapMultiReturn(e *multiReturnErr) (int, error) { return 1, e }
+
+//go:noinline
+func multiReturnEscape() error {
+	e := &multiReturnErr{}
+	e.x[1] = 42
+	_, err := wrapMultiReturn(e)
+	return err
+}
+
+// clobberStack overwrites the stack area that multiReturnEscape used.
+//
+//go:noinline
+func clobberStack() int {
+	var a [16]int
+	for i := range a {
+		a[i] = 1000 + i
+	}
+	s := 0
+	for _, v := range a {
+		s += v
+	}
+	return s
 }
 
 func runFunc(f func(int), arg int) {

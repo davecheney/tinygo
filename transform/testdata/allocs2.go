@@ -174,3 +174,97 @@ func unsafeNoEscape(ptr unsafe.Pointer) uintptr
 func keepAliveNoEscape(ptr unsafe.Pointer)
 
 var pseudoVolatile volatile.Register32
+
+type errT struct{ x [4]int }
+
+func (e *errT) Error() string { return "errT" }
+
+type ptrStruct struct {
+	n int
+	p *errT
+}
+
+func wrapError(e *errT) (int, error) { return 1, e }
+
+func wrapErrorFirst(e *errT) (error, int) { return e, 1 }
+
+func wrapAny(e *errT) (int, any) { return 1, e }
+
+func wrapSlice(b []byte) (int, []byte) { return 1, b }
+
+func wrapStruct(e *errT) (int, ptrStruct) { return 1, ptrStruct{1, e} }
+
+func wrapArray(e *errT) (int, [2]*errT) { return 1, [2]*errT{e, nil} }
+
+var globalErr error
+
+// The pointer is returned as one of multiple return values, wrapped in an
+// interface, slice, struct or array, and then escapes from the caller.
+func escapingMultiReturn() error {
+	e := &errT{} // OUT: escapes at line 206
+	_, err := wrapError(e)
+	return err
+}
+
+func escapingMultiReturnFirst() error {
+	e := &errT{} // OUT: escapes at line 212
+	err, _ := wrapErrorFirst(e)
+	return err
+}
+
+func escapingMultiReturnAny() any {
+	e := &errT{} // OUT: escapes at line 218
+	_, v := wrapAny(e)
+	return v
+}
+
+func escapingMultiReturnSlice() []byte {
+	b := make([]byte, 8) // OUT: escapes at line 224
+	_, s := wrapSlice(b)
+	return s
+}
+
+func escapingMultiReturnStruct() *errT {
+	e := &errT{} // OUT: escapes at line 195
+	_, s := wrapStruct(e)
+	return s.p
+}
+
+func escapingMultiReturnArray() *errT {
+	e := &errT{} // OUT: escapes at line 236
+	_, a := wrapArray(e)
+	return a[0]
+}
+
+func escapingMultiReturnGlobal() {
+	e := &errT{} // OUT: escapes at line 242
+	_, err := wrapError(e)
+	globalErr = err
+}
+
+// The pointer is returned as one of multiple return values, but the caller
+// does not let it escape, so it can stay on the stack.
+func nonEscapingMultiReturnInt() int {
+	e := &errT{}
+	n, _ := wrapError(e)
+	return n
+}
+
+func nonEscapingMultiReturnNilCheck() bool {
+	e := &errT{}
+	_, err := wrapError(e)
+	return err != nil
+}
+
+func nonEscapingMultiReturnSliceLen() int {
+	b := make([]byte, 8)
+	_, s := wrapSlice(b)
+	return len(s)
+}
+
+func nonEscapingMultiReturnArrayLoad() int {
+	e := &errT{}
+	e.x[1] = 42
+	_, a := wrapArray(e)
+	return a[0].x[1]
+}

@@ -9,3 +9,10 @@ testdata/allocs2.go:50.1,50.36 1 0
 testdata/allocs2.go:107.1,107.49 1 0
 testdata/allocs2.go:114.1,114.51 1 0
 testdata/allocs2.go:128.1,128.55 1 0
+testdata/allocs2.go:204.1,204.42 1 0
+testdata/allocs2.go:210.1,210.42 1 0
+testdata/allocs2.go:216.1,216.42 1 0
+testdata/allocs2.go:222.1,222.50 1 0
+testdata/allocs2.go:228.1,228.42 1 0
+testdata/allocs2.go:234.1,234.42 1 0
+testdata/allocs2.go:240.1,240.42 1 0
