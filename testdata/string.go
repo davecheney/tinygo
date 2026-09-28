@@ -213,6 +213,74 @@ func testByteSliceStringComparisons() {
 	println("index absent:", findBytes(data, sep))
 }
 
+// Compare against string literals of various lengths. The compiler may expand
+// these comparisons inline, so test lengths around the load sizes, high bytes,
+// zero bytes, and unaligned input pointers.
+var constCompareInputs = []string{
+	"", "a", "b", "ab", "ac", "abc", "abd", "beta", "betb", "\x80\xff\x00\x7f",
+	"\x80\xff\x00\x7e", "gammaXY", "gammaXYZ", "gammaXYz", "hammaXYZ",
+	"0123456789abcde", "0123456789abcdef", "1123456789abcdef", "0123456789abcdeF",
+	"0123456789abcdefg", "0123456789abcdefh", "0123456789abcdef0123456789abcdef",
+	"0123456789abcdef0123456789abcdeg", "\x00\x00\x00\x00\x00\x00\x00\x00",
+	"\x00\x00\x00\x00\x00\x00\x00\x01",
+}
+
+//go:noinline
+func constCompareMask(s string) (mask uint32) {
+	for i, eq := range [...]bool{
+		s == "a",
+		s == "ab",
+		"abc" == s,
+		s == "beta",
+		s == "\x80\xff\x00\x7f",
+		s == "gammaXY",
+		s == "gammaXYZ",
+		s == "0123456789abcde",
+		s == "0123456789abcdef",
+		s == "0123456789abcdefg",
+		s == "0123456789abcdef0123456789abcdef",
+		s == "\x00\x00\x00\x00\x00\x00\x00\x00",
+		s != "beta",
+	} {
+		if eq {
+			mask |= 1 << i
+		}
+	}
+	return
+}
+
+//go:noinline
+func constCompareSwitch(s string) int {
+	switch s {
+	case "a":
+		return 1
+	case "abc":
+		return 2
+	case "beta":
+		return 3
+	case "gammaXYZ":
+		return 4
+	case "0123456789abcdef":
+		return 5
+	case "0123456789abcdef0123456789abcdef":
+		return 6
+	case "\x80\xff\x00\x7f":
+		return 7
+	}
+	return 0
+}
+
+func testStringConstCompare() {
+	buf := make([]byte, 64)
+	for _, input := range constCompareInputs {
+		// Copy the input to a heap buffer at an odd offset, to get a
+		// non-constant, unaligned pointer.
+		copy(buf[3:], input)
+		s := string(buf[3 : 3+len(input)])
+		println("const compare:", len(input), constCompareMask(s), constCompareSwitch(s))
+	}
+}
+
 func main() {
 	testRangeString()
 	testStringToRunes()
@@ -220,5 +288,6 @@ func main() {
 	testByteSliceStringCompareNil()
 	testByteSliceStringCompareEmpty()
 	testByteSliceStringComparisons()
+	testStringConstCompare()
 	var _ = len([]byte(myString("foobar"))) // issue 1246
 }

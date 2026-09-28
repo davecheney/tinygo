@@ -45,3 +45,28 @@ named: true false abc abc
 named runes: a€😀
 index: 7 -1
 index absent: -1
+const compare: 0 4096 0
+const compare: 1 4097 1
+const compare: 1 4096 0
+const compare: 2 4098 0
+const compare: 2 4096 0
+const compare: 3 4100 2
+const compare: 3 4096 0
+const compare: 4 8 3
+const compare: 4 4096 0
+const compare: 4 4112 7
+const compare: 4 4096 0
+const compare: 7 4128 0
+const compare: 8 4160 4
+const compare: 8 4096 0
+const compare: 8 4096 0
+const compare: 15 4224 0
+const compare: 16 4352 5
+const compare: 16 4096 0
+const compare: 16 4096 0
+const compare: 17 4608 0
+const compare: 17 4096 0
+const compare: 32 5120 6
+const compare: 32 4096 0
+const compare: 8 6144 0
+const compare: 8 4096 0

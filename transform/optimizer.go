@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/token"
 	"os"
+	"strings"
 
 	"github.com/tinygo-org/tinygo/compileopts"
 	"github.com/tinygo-org/tinygo/compiler/ircheck"
@@ -21,6 +22,61 @@ func OptimizePackage(mod llvm.Module, config *compileopts.Config) {
 	if speedLevel > 0 {
 		OptimizeMaps(mod)
 	}
+}
+
+// stringEqualInlineLimit returns the maximum length of a constant string for
+// which a comparison is expanded inline instead of calling
+// runtime.stringEqual. The limits were chosen by measuring code size on a few
+// programs on Cortex-M, RISC-V, WebAssembly and x86-64:
+//
+//   - At -opt=z, a call to runtime.stringEqual is only a few instructions, so
+//     only expand comparisons that need a single native word load.
+//   - At -opt=s, expanding up to 8 bytes (two loads on 32-bit targets) is
+//     smaller than the inlined and unrolled byte loop LLVM otherwise produces.
+//   - When optimizing for speed, expand up to 16 bytes.
+//   - Targets without fast unaligned loads compare byte by byte, which costs
+//     about as much as a call already at 2-3 bytes.
+func stringEqualInlineLimit(mod llvm.Module, config *compileopts.Config, fastUnaligned bool) int {
+	_, _, sizeLevel := config.OptLevel()
+	if sizeLevel == 0 {
+		return 16
+	}
+	if !fastUnaligned {
+		return 2
+	}
+	if sizeLevel == 1 {
+		return 8
+	}
+	targetData := llvm.NewTargetData(mod.DataLayout())
+	defer targetData.Dispose()
+	return targetData.PointerSize()
+}
+
+// hasFastUnalignedAccess returns whether the target can load a misaligned
+// 16/32/64-bit integer with a single instruction (or at most two, like
+// lwl/lwr on MIPS), instead of the backend splitting the load into bytes.
+func hasFastUnalignedAccess(config *compileopts.Config) bool {
+	features := config.Features()
+	if strings.Contains(features, "+strict-align") {
+		return false
+	}
+	arch, _, _ := strings.Cut(config.Triple(), "-")
+	switch {
+	case arch == "x86_64", arch == "i386", arch == "i686", arch == "aarch64", arch == "arm64",
+		arch == "wasm32", arch == "wasm64":
+		return true
+	case strings.HasPrefix(arch, "thumbv7"), strings.HasPrefix(arch, "thumbv8"),
+		strings.HasPrefix(arch, "armv6"), strings.HasPrefix(arch, "armv7"), strings.HasPrefix(arch, "armv8"):
+		// ARMv6 and later (except ARMv6-M, which is thumbv6m) support
+		// unaligned word and halfword loads.
+		return true
+	case strings.HasPrefix(arch, "riscv"):
+		return strings.Contains(features, "+unaligned-scalar-mem") || strings.Contains(features, "+fast-unaligned-access")
+	case strings.HasPrefix(arch, "mips"):
+		// lwl/lwr.
+		return true
+	}
+	return false
 }
 
 // Optimize runs a number of optimization and transformation passes over the
@@ -108,7 +164,8 @@ func Optimize(mod llvm.Module, config *compileopts.Config) []error {
 			},
 		)
 		OptimizeStringToBytes(mod)
-		OptimizeStringEqual(mod)
+		fastUnaligned := hasFastUnalignedAccess(config)
+		OptimizeStringEqual(mod, stringEqualInlineLimit(mod, config, fastUnaligned), fastUnaligned)
 
 	} else {
 		// Must be run at any optimization level.
