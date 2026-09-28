@@ -3,6 +3,7 @@ package main
 import (
 	"runtime"
 	"sync"
+	"unsafe"
 )
 
 var wg sync.WaitGroup
@@ -42,6 +43,9 @@ func main() {
 
 	println("\n# recover runtime errors")
 	recoverRuntimeError()
+
+	println("\n# recover runtime error messages")
+	recoverRuntimeErrorMessages()
 
 	println("\n# recover from nil map and closed channel")
 	recoverNilMapAndChan()
@@ -292,6 +296,44 @@ func recoverRuntimeError() {
 	})
 }
 
+func recoverRuntimeErrorMessages() {
+	recoverRuntimeErrorValue(func() {
+		var pointer *int
+		_ = *pointer
+	})
+	recoverRuntimeErrorValue(func() {
+		zero := 0
+		_ = 1 / zero
+	})
+	recoverRuntimeErrorValue(func() {
+		var values [1]int
+		index := 2
+		_ = values[index]
+	})
+	recoverRuntimeErrorValue(func() {
+		var values [1]int
+		index := 2
+		_ = values[:index]
+	})
+	recoverRuntimeErrorValue(func() {
+		values := make([]int, 1)
+		_ = (*[2]int)(values)
+	})
+	recoverRuntimeErrorValue(func() {
+		length := 1
+		_ = unsafe.Slice((*int)(nil), length)
+	})
+	recoverRuntimeErrorValue(func() {
+		shift := -1
+		_ = 1 << shift
+	})
+	recoverRuntimeErrorValue(func() {
+		var left interface{} = []int{1}
+		var right interface{} = []int{1}
+		_ = left == right
+	})
+}
+
 //go:noinline
 func readOutOfBounds(s []byte) byte {
 	return s[2]
@@ -356,6 +398,14 @@ func recoverNilMapAndChan() {
 		ch := make(chan int)
 		close(ch)
 		ch <- 1
+	})
+	recoverMustPanic("closed chan select", func() {
+		ch := make(chan int)
+		close(ch)
+		select {
+		case ch <- 1:
+		default:
+		}
 	})
 	recoverMustPanic("close nil chan", func() {
 		var ch chan int

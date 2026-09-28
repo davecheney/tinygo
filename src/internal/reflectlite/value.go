@@ -658,6 +658,9 @@ func (v Value) Complex() complex128 {
 }
 
 func (v Value) String() string {
+	if !v.IsValid() {
+		return "<invalid Value>"
+	}
 	switch v.Kind() {
 	case String:
 		// A string value is always bigger than a pointer as it is made of a
@@ -1821,7 +1824,7 @@ func Zero(typ Type) Value {
 		return Value{
 			typecode: typ.(*RawType),
 			value:    nil,
-			flags:    valueFlagExported | valueFlagRO,
+			flags:    valueFlagExported,
 		}
 	}
 
@@ -1829,14 +1832,14 @@ func Zero(typ Type) Value {
 		return Value{
 			typecode: typ.(*RawType),
 			value:    unsafe.Pointer(zerobuffer),
-			flags:    valueFlagExported | valueFlagRO,
+			flags:    valueFlagExported,
 		}
 	}
 
 	return Value{
 		typecode: typ.(*RawType),
 		value:    alloc(size, typ.(*RawType).gcLayout()),
-		flags:    valueFlagExported | valueFlagRO,
+		flags:    valueFlagExported,
 	}
 }
 

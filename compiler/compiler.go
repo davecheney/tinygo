@@ -1711,6 +1711,77 @@ func (b *builder) getValuePointer(value ssa.Value) llvm.Value {
 	return ptr
 }
 
+func isMemequalArrayComparison(expr *ssa.BinOp) bool {
+	typ, ok := expr.X.Type().Underlying().(*types.Array)
+	return ok &&
+		typ.Len() > hashArrayUnrollLimit &&
+		isBinaryComparable(typ.Elem()) &&
+		(expr.Op == token.EQL || expr.Op == token.NEQ)
+}
+
+func canUseDereferencePointer(unop *ssa.UnOp) bool {
+	if !isDereference(unop) {
+		return false
+	}
+	comparison := adjacentComparison(unop, isDereference)
+	return comparison != nil && isMemequalArrayComparison(comparison)
+}
+
+func isDereference(value ssa.Value) bool {
+	unop, ok := value.(*ssa.UnOp)
+	return ok && unop.Op == token.MUL
+}
+
+// adjacentComparison returns the only binary operation that uses instr, if
+// only debug refs and other operands accepted by operandOK run in between.
+func adjacentComparison(instr ssa.Instruction, operandOK func(ssa.Value) bool) *ssa.BinOp {
+	value, ok := instr.(ssa.Value)
+	if !ok {
+		return nil
+	}
+	referrers := value.Referrers()
+	if referrers == nil {
+		return nil
+	}
+	var comparison *ssa.BinOp
+	for _, referrer := range *referrers {
+		switch referrer := referrer.(type) {
+		case *ssa.DebugRef:
+		case *ssa.BinOp:
+			if comparison != nil {
+				return nil
+			}
+			comparison = referrer
+		default:
+			return nil
+		}
+	}
+	if comparison == nil || instr.Block() != comparison.Block() {
+		return nil
+	}
+
+	found := false
+	for _, instruction := range instr.Block().Instrs {
+		if !found {
+			found = instruction == instr
+			continue
+		}
+		if instruction == comparison {
+			return comparison
+		}
+		switch instruction := instruction.(type) {
+		case *ssa.DebugRef:
+		case ssa.Value:
+			if comparison.X != instruction && comparison.Y != instruction || !operandOK(instruction) {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+	return nil
+}
+
 func (b *builder) getCallArgument(value ssa.Value, indirect bool) llvm.Value {
 	if indirect {
 		return b.getValuePointer(value)
@@ -2450,6 +2521,24 @@ func (c *compilerContext) maxSliceSize(elementType llvm.Type) uint64 {
 	return maxSize
 }
 
+// goHeapAddressBits matches heapAddrBits for Go's common 64-bit targets.
+// See https://github.com/golang/go/blob/2ff5743d9fd52fac166225e75df0c2c1edf82abb/src/runtime/malloc.go#L207-L220.
+const goHeapAddressBits = 48
+
+// maxSliceAllocationSize determines the maximum length of an allocated slice.
+func (c *compilerContext) maxSliceAllocationSize(elementType llvm.Type) uint64 {
+	maxSize := c.maxSliceSize(elementType)
+	if c.uintptrType.IntTypeWidth() <= goHeapAddressBits {
+		return maxSize
+	}
+
+	elementSize := c.targetData.TypeAllocSize(elementType)
+	if elementSize == 0 {
+		return maxSize
+	}
+	return min(maxSize, (uint64(1)<<goHeapAddressBits)/elementSize)
+}
+
 // createExpr translates a Go SSA expression to LLVM IR. This can be zero, one,
 // or multiple LLVM IR instructions and/or runtime calls.
 func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
@@ -2483,6 +2572,17 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 			return buf, nil
 		}
 	case *ssa.BinOp:
+		if isMemequalArrayComparison(expr) {
+			typ := expr.X.Type().Underlying().(*types.Array)
+			x := b.getValuePointer(expr.X)
+			y := b.getValuePointer(expr.Y)
+			size := llvm.ConstInt(b.uintptrType, b.targetData.TypeAllocSize(b.getLLVMType(typ)), false)
+			result := b.createRuntimeCall("memequal", []llvm.Value{x, y, size}, "arraycmp")
+			if expr.Op == token.NEQ {
+				result = b.CreateNot(result, "")
+			}
+			return result, nil
+		}
 		x := b.getValue(expr.X, getPos(expr))
 		y := b.getValue(expr.Y, getPos(expr))
 		return b.createBinOp(expr.Op, expr.X.Type(), expr.Y.Type(), x, y, expr.Pos())
@@ -2533,6 +2633,12 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 		panic("const is not an expression")
 	case *ssa.Convert:
 		x := b.getValue(expr.X, getPos(expr))
+		if isByteSliceToStringComparison(expr) {
+			str := llvm.Undef(b.getLLVMRuntimeType("_string"))
+			str = b.CreateInsertValue(str, b.CreateExtractValue(x, 0, ""), 0, "")
+			str = b.CreateInsertValue(str, b.CreateExtractValue(x, 1, ""), 1, "")
+			return str, nil
+		}
 		return b.createConvert(expr.X.Type(), expr.Type(), x, expr.Pos())
 	case *ssa.Extract:
 		if _, ok := expr.Tuple.(*ssa.Select); ok {
@@ -2709,7 +2815,8 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 		// Bounds checking.
 		lenType := expr.Len.Type().Underlying().(*types.Basic)
 		capType := expr.Cap.Type().Underlying().(*types.Basic)
-		maxSizeValue := llvm.ConstInt(b.uintptrType, maxSize, false)
+		maxAllocationSize := b.maxSliceAllocationSize(llvmElemType)
+		maxSizeValue := llvm.ConstInt(b.uintptrType, maxAllocationSize, false)
 		b.createSliceBoundsCheck(maxSizeValue, sliceLen, sliceCap, sliceCap, lenType, capType, capType)
 
 		// Allocate the backing array.
@@ -2942,6 +3049,34 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 	default:
 		return llvm.Value{}, b.makeError(expr.Pos(), "todo: unknown expression: "+expr.String())
 	}
+}
+
+func isByteSliceToStringComparison(expr *ssa.Convert) bool {
+	if !isByteSliceToStringConvert(expr) {
+		return false
+	}
+	comparison := adjacentComparison(expr, isByteSliceToStringConvert)
+	return comparison != nil &&
+		(comparison.Op == token.EQL || comparison.Op == token.NEQ) &&
+		isByteSliceToStringConvert(comparison.X) &&
+		isByteSliceToStringConvert(comparison.Y)
+}
+
+func isByteSliceToStringConvert(value ssa.Value) bool {
+	expr, ok := value.(*ssa.Convert)
+	if !ok {
+		return false
+	}
+	target, ok := expr.Type().Underlying().(*types.Basic)
+	if !ok || target.Info()&types.IsString == 0 {
+		return false
+	}
+	source, ok := expr.X.Type().Underlying().(*types.Slice)
+	if !ok {
+		return false
+	}
+	element, ok := source.Elem().Underlying().(*types.Basic)
+	return ok && element.Kind() == types.Byte
 }
 
 // createBinOp creates a LLVM binary operation (add, sub, mul, etc) for a Go
@@ -3309,15 +3444,27 @@ func (b *builder) createBinOp(op token.Token, typ, ytyp types.Type, x, y llvm.Va
 		//     Array values are comparable if values of the array element type
 		//     are comparable. Two array values are equal if their corresponding
 		//     elements are equal.
-		result := llvm.ConstInt(b.ctx.Int1Type(), 1, true)
-		for i := 0; i < int(typ.Len()); i++ {
-			xField := b.CreateExtractValue(x, i, "")
-			yField := b.CreateExtractValue(y, i, "")
-			fieldEqual, err := b.createBinOp(token.EQL, typ.Elem(), typ.Elem(), xField, yField, pos)
-			if err != nil {
-				return llvm.Value{}, err
+		var result llvm.Value
+		if typ.Len() > hashArrayUnrollLimit && isBinaryComparable(typ.Elem()) {
+			xPtr, xSize := b.createTemporaryAlloca(x.Type(), "arraycmp.x")
+			yPtr, ySize := b.createTemporaryAlloca(y.Type(), "arraycmp.y")
+			b.CreateStore(x, xPtr)
+			b.CreateStore(y, yPtr)
+			size := llvm.ConstInt(b.uintptrType, b.targetData.TypeAllocSize(x.Type()), false)
+			result = b.createRuntimeCall("memequal", []llvm.Value{xPtr, yPtr, size}, "arraycmp")
+			b.emitLifetimeEnd(xPtr, xSize)
+			b.emitLifetimeEnd(yPtr, ySize)
+		} else {
+			result = llvm.ConstInt(b.ctx.Int1Type(), 1, true)
+			for i := 0; i < int(typ.Len()); i++ {
+				xField := b.CreateExtractValue(x, i, "")
+				yField := b.CreateExtractValue(y, i, "")
+				fieldEqual, err := b.createBinOp(token.EQL, typ.Elem(), typ.Elem(), xField, yField, pos)
+				if err != nil {
+					return llvm.Value{}, err
+				}
+				result = b.CreateAnd(result, fieldEqual, "")
 			}
-			result = b.CreateAnd(result, fieldEqual, "")
 		}
 		switch op {
 		case token.EQL: // ==
@@ -3533,7 +3680,7 @@ func (b *builder) createConvert(typeFrom, typeTo types.Type, value llvm.Value, p
 				}
 				return b.createRuntimeCall("stringFromUnicode", []llvm.Value{value}, ""), nil
 			case *types.Slice:
-				switch typeFrom.Elem().(*types.Basic).Kind() {
+				switch typeFrom.Elem().Underlying().(*types.Basic).Kind() {
 				case types.Byte:
 					return b.createRuntimeCall("stringFromBytes", []llvm.Value{value}, ""), nil
 				case types.Rune:
@@ -3761,6 +3908,9 @@ func (b *builder) createUnOp(unop *ssa.UnOp) (llvm.Value, error) {
 			return fn, nil
 		} else {
 			b.createNilCheck(unop.X, x, "deref")
+			if canUseDereferencePointer(unop) {
+				return x, nil
+			}
 			return b.loadFromStorage(x, unop.Type(), ""), nil
 		}
 	case token.XOR: // ^x, toggle all bits in integer

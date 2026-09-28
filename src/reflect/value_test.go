@@ -39,6 +39,12 @@ func TestTinyIndirectPointers(t *testing.T) {
 	}
 }
 
+func TestTinyInvalidValueString(t *testing.T) {
+	if got := (Value{}).String(); got != "<invalid Value>" {
+		t.Errorf("Value{}.String() = %q, want %q", got, "<invalid Value>")
+	}
+}
+
 func TestTinyMap(t *testing.T) {
 
 	m := make(map[string]int)
@@ -493,6 +499,13 @@ func TestTinyStruct(t *testing.T) {
 }
 
 func TestTinyZero(t *testing.T) {
+	for _, value := range []any{(*int)(nil), [16]byte{}, [64]byte{}} {
+		zero := Zero(TypeOf(value))
+		if IsRO(zero) {
+			t.Errorf("Zero(%v) is read-only", zero.Type())
+		}
+	}
+
 	s := "hello, world"
 	sptr := &s
 	v := ValueOf(&sptr).Elem()

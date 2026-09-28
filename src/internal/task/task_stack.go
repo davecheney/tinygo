@@ -33,7 +33,7 @@ const hasReleasableStack = false
 
 //export tinygo_task_exit
 func taskExit() {
-	exit(false)
+	exit(false, nil)
 }
 
 // initialize the state and prepare to call the specified function with the specified argument bundle.
@@ -72,6 +72,7 @@ var startTask [0]uint8
 // The new goroutine is scheduled to run later.
 func start(fn uintptr, args unsafe.Pointer, stackSize uintptr) {
 	t := &Task{}
+	inheritSynctest(t)
 	addLiveTask(t)
 	t.state.initialize(fn, args, stackSize)
 	scheduleTask(t)

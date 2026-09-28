@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"debug/dwarf"
+	"debug/elf"
 	"errors"
 	"flag"
 	"io"
@@ -129,6 +131,10 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 		hostOptions := optionsFromTarget("", sema)
 		runPlatTests(hostOptions, tests, t)
+		t.Run("testing.go-verbose", func(t *testing.T) {
+			t.Parallel()
+			runTest("testing-verbose.go", hostOptions, t, nil, nil)
+		})
 
 		// scheduler.threads needs threadID, which exists only on Linux and Darwin.
 		// scheduler.none does not link on Windows.
@@ -167,6 +173,47 @@ func TestBuild(t *testing.T) {
 			opts := optionsFromTarget("", sema)
 			opts.Opt = "0"
 			runTestWithConfig("print.go", t, opts, nil, nil)
+		})
+
+		t.Run("opt=0-gc=boehm", func(t *testing.T) {
+			t.Parallel()
+			opts := optionsFromTarget("", sema)
+			opts.Opt = "0"
+			opts.GC = "boehm"
+			runTestWithConfig("gc-boehm-opt0.go", t, opts, nil, nil)
+		})
+
+		// Regression test: at -opt=0 the compiler does not always remove a
+		// local escaping through a pointer cast, so printitf used to
+		// allocate on the panic path. printitf is //go:noheap, so a
+		// regression here makes the build fail with a linker error.
+		t.Run("opt=0-printitf-cortex-m-qemu", func(t *testing.T) {
+			t.Parallel()
+			opts := optionsFromTarget("cortex-m-qemu", sema)
+			opts.Opt = "0"
+			config, err := builder.NewConfig(&opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = Build("testdata/panic-value.go", t.TempDir()+"/panic-value", config)
+			if err != nil {
+				w := &bytes.Buffer{}
+				diagnostics.CreateDiagnostics(err).WriteTo(w, "")
+				t.Fatal(w.String())
+			}
+		})
+
+		// Regression test: at -opt=0 the compiler does not always remove a
+		// local escaping through Queue.Push, so runGC used to allocate while
+		// marking the runqueue. runGC is //go:noheap, so a regression here
+		// makes the build fail with a linker error instead of silently
+		// hanging like it used to.
+		t.Run("opt=0-gc-cortex-m-qemu", func(t *testing.T) {
+			t.Parallel()
+			opts := optionsFromTarget("cortex-m-qemu", sema)
+			opts.Opt = "0"
+			emuCheck(t, opts)
+			runTestWithConfig("gc.go", t, opts, nil, nil)
 		})
 
 		t.Run("gc=none-runtime-panic", func(t *testing.T) {
@@ -253,6 +300,7 @@ func TestBuild(t *testing.T) {
 			t.Parallel()
 
 			runPlatTests(optionsFromTarget("wasm", sema), tests, t)
+			runGCLivenessTest(optionsFromTarget("wasm", sema), t)
 			// Test with -gc=boehm.
 			t.Run("gc.go-boehm", func(t *testing.T) {
 				t.Parallel()
@@ -266,6 +314,7 @@ func TestBuild(t *testing.T) {
 			t.Parallel()
 			options := optionsFromTarget("wasip1", sema)
 			runPlatTests(options, tests, t)
+			runGCLivenessTest(options, t)
 			t.Run("cgo-realloc", func(t *testing.T) {
 				runTest("cgo-realloc/", options, t, nil, nil)
 			})
@@ -282,6 +331,7 @@ func TestBuild(t *testing.T) {
 		t.Run("WASIp2", func(t *testing.T) {
 			t.Parallel()
 			runPlatTests(optionsFromTarget("wasip2", sema), tests, t)
+			runGCLivenessTest(optionsFromTarget("wasip2", sema), t)
 		})
 	}
 
@@ -596,6 +646,16 @@ func optionsFromOSARCH(osarch string, sema chan struct{}) compileopts.Options {
 	return options
 }
 
+// runGCLivenessTest runs testdata/gc-liveness-repro.go. Only targets with
+// stack objects can lose a GC root the way it reproduces, so it is registered
+// per wasm target instead of being part of the shared test list.
+func runGCLivenessTest(options compileopts.Options, t *testing.T) {
+	t.Run("gc-liveness-repro.go", func(t *testing.T) {
+		t.Parallel()
+		runTest("gc-liveness-repro.go", options, t, nil, nil)
+	})
+}
+
 func runTest(name string, options compileopts.Options, t *testing.T, cmdArgs, environmentVars []string) {
 	t.Helper()
 	runTestWithConfig(name, t, options, cmdArgs, environmentVars)
@@ -658,7 +718,7 @@ func runTestWithConfig(name string, t *testing.T, options compileopts.Options, c
 	if config.EmulatorName() == "qemu-system-xtensa" {
 		actual = cleanESP32QEMUOutput(actual)
 	}
-	if name == "testing.go" {
+	if name == "testing.go" || name == "testing-verbose.go" {
 		// Strip actual time.
 		re := regexp.MustCompile(`\([0-9]\.[0-9][0-9]s\)`)
 		actual = re.ReplaceAllLiteral(actual, []byte{'(', '0', '.', '0', '0', 's', ')'})
@@ -1517,4 +1577,44 @@ func TestMain(m *testing.M) {
 
 	// Run normal tests.
 	os.Exit(m.Run())
+}
+
+func TestInitAllDWARF(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS != "linux" {
+		t.Skip("test reads ELF DWARF")
+	}
+
+	options := optionsFromTarget("", sema)
+	config, err := builder.NewConfig(&options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := builder.Build("testdata/init.go", "", t.TempDir(), config)
+	if err != nil {
+		t.Fatal("failed to build binary:", err)
+	}
+	f, err := elf.Open(result.Binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	d, err := f.DWARF()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := d.Reader()
+	for {
+		entry, err := r.Next()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if entry == nil {
+			t.Fatal("no DWARF subprogram for runtime.initAll")
+		}
+		if entry.Tag == dwarf.TagSubprogram && entry.Val(dwarf.AttrName) == "runtime.initAll" {
+			return
+		}
+	}
 }
