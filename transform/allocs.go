@@ -272,12 +272,25 @@ func callValueEscapesAt(call, value llvm.Value, allowReturn bool, visiting map[l
 		}
 		matched = true
 		index := i + 1 // param attributes start at 1
-		nocapture := llvmutil.IsNoCapture(called.GetEnumAttributeAtIndex(index, kindNoCapture))
+		// The captures(...) attribute (LLVM 21+) describes which parts of the
+		// pointer may be captured. Only captures that carry provenance allow
+		// the pointed-to object to be accessed after the call returns, so
+		// captures of just the address (including the common address_is_null
+		// from Go nil checks) do not prevent stack allocation. Captures with
+		// provenance through the return value are handled like 'returned':
+		// the uses of the call result are checked instead.
+		// This relies on TinyGo not emitting ptrtoaddr for addresses that
+		// escape (for example when stored or returned as a uintptr): LLVM
+		// infers captures(address) for any use of ptrtoaddr.
+		other, ret := llvmutil.CaptureInfo(called.GetEnumAttributeAtIndex(index, kindNoCapture))
 		returnedParam := !called.GetEnumAttributeAtIndex(index, kindReturned).IsNil()
 		if returnedParam {
 			result.returned = true
 		}
-		if nocapture {
+		if !other.HasProvenance() {
+			if ret.HasProvenance() {
+				result.returned = true
+			}
 			continue
 		}
 		if called.IsDeclaration() {

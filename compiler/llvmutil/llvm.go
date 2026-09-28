@@ -314,15 +314,61 @@ func NoCaptureAttrName() string {
 // NoCaptureAttrName) indicates that the pointer it is attached to does not
 // escape by capture. It returns false for a nil attribute.
 func IsNoCapture(attr llvm.Attribute) bool {
+	other, ret := CaptureInfo(attr)
+	return other == CaptureNone && ret == CaptureNone
+}
+
+// CaptureComponents mirrors llvm::CaptureComponents (llvm/Support/ModRef.h,
+// LLVM 21+). It describes which parts of a pointer may be captured.
+type CaptureComponents uint8
+
+const (
+	CaptureNone           CaptureComponents = 0
+	CaptureAddressIsNull  CaptureComponents = 1
+	CaptureAddress        CaptureComponents = 3 // includes AddressIsNull
+	CaptureReadProvenance CaptureComponents = 4
+	CaptureProvenance     CaptureComponents = 12 // includes ReadProvenance
+	CaptureAll            CaptureComponents = 15
+)
+
+// HasProvenance reports whether c includes (read) provenance, meaning that a
+// capture in these components can be used to access the pointed-to memory.
+func (c CaptureComponents) HasProvenance() bool {
+	return c&CaptureReadProvenance != 0
+}
+
+// CapturesAttr returns a parameter attribute describing that the parameter is
+// only captured in the given components: 'other' for captures other than via
+// the return value, 'ret' for captures via the return value.
+//
+// On LLVM 21+ this is captures(...). Older LLVM versions only have the boolean
+// 'nocapture' attribute, which is returned only when both other and ret are
+// CaptureNone; otherwise a nil attribute is returned (meaning no attribute
+// should be added, which is always conservatively correct).
+func CapturesAttr(ctx llvm.Context, other, ret CaptureComponents) llvm.Attribute {
+	if Version() >= 21 {
+		kind := llvm.AttributeKindID("captures")
+		return ctx.CreateEnumAttribute(kind, uint64(other&CaptureAll)<<4|uint64(ret&CaptureAll))
+	}
+	if other == CaptureNone && ret == CaptureNone {
+		return ctx.CreateEnumAttribute(llvm.AttributeKindID("nocapture"), 0)
+	}
+	return llvm.Attribute{}
+}
+
+// CaptureInfo decodes attr (looked up using the kind returned by
+// NoCaptureAttrName) into the components that may be captured other than via
+// the return value, and via the return value. A nil attribute means that
+// everything may be captured.
+func CaptureInfo(attr llvm.Attribute) (other, ret CaptureComponents) {
 	if attr.IsNil() {
-		return false
+		return CaptureAll, CaptureAll
 	}
 	if Version() >= 21 {
-		// captures(none) is encoded as the value 0; any other value permits
-		// some form of capture.
-		return attr.GetEnumValue() == 0
+		v := attr.GetEnumValue()
+		return CaptureComponents(v>>4) & CaptureAll, CaptureComponents(v) & CaptureAll
 	}
-	return true
+	return CaptureNone, CaptureNone // nocapture
 }
 
 // ByteOrder returns the byte order for the given target triple. Most targets are little

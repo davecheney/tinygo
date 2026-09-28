@@ -268,3 +268,25 @@ func nonEscapingMultiReturnArrayLoad() int {
 	_, a := wrapArray(e)
 	return a[0].x[1]
 }
+
+type walkState struct {
+	depth int
+	buf   [4]int
+}
+
+// Recursive function that dereferences (and therefore nil-checks) its
+// parameter. LLVM infers captures(address_is_null) for s, which does not let
+// the object escape.
+func (s *walkState) walk(n int) int {
+	if n == 0 {
+		return s.depth
+	}
+	s.depth++
+	s.buf[n&3] = n
+	return s.walk(n-1) + s.buf[0]
+}
+
+func recursiveNilCheck() int {
+	s := walkState{} // no escape: the recursion only nil-checks the address
+	return s.walk(3)
+}
