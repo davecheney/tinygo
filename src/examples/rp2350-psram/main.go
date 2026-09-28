@@ -12,6 +12,7 @@ import (
 )
 
 // Two 480x480 RGB565 frames, placed in PSRAM and zeroed at startup.
+// Range over &frames[i], not frames[i], to avoid copying the array to the heap.
 //
 //go:section .psram_bss
 var frames [2][480 * 480]uint16
@@ -30,7 +31,7 @@ func main() {
 
 	ok := true
 	for i := range frames {
-		for j, v := range frames[i] {
+		for j, v := range &frames[i] {
 			if v != 0 {
 				println("FAIL frames not zeroed at", i, j, v)
 				ok = false
@@ -53,7 +54,7 @@ func main() {
 
 		errors := 0
 		for i := range frames {
-			for j, v := range frames[i] {
+			for j, v := range &frames[i] {
 				if want := uint16(uint32(j)*2654435761>>16) ^ uint16(i) ^ uint16(pass); v != want {
 					if errors < 4 {
 						println("FAIL frames", i, j, "got", v, "want", want)
@@ -62,7 +63,7 @@ func main() {
 				}
 			}
 		}
-		for j, v := range scratch {
+		for j, v := range &scratch {
 			if want := uint32(j)*2654435761 ^ pass; v != want {
 				if errors < 4 {
 					println("FAIL scratch", j, "got", v, "want", want)
