@@ -26,6 +26,11 @@ var repeatedRoots []inlineFalseRoot
 var falseRootAddress uintptr
 var frameSum uintptr
 
+// allocSink makes the probe allocations in expectCollected escape. Without it,
+// the compiler may put them on the stack (only their address is inspected),
+// and then they can never reuse the address of the collected object.
+var allocSink *falseRootObject
+
 //go:noinline
 func fillFrame(frame []uintptr) {
 	for i := range frame {
@@ -67,6 +72,7 @@ func expectCollected(depth int, setRoot func(uintptr)) {
 	runtime.GC()
 	for i := 0; i < 100000; i++ {
 		object := new(falseRootObject)
+		allocSink = object
 		if uintptr(unsafe.Pointer(object)) == falseRootAddress {
 			return
 		}
