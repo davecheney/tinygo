@@ -567,8 +567,15 @@ var lifetimeSizeArgRe = regexp.MustCompile(`(@llvm\.lifetime\.(?:start|end)\.p0\
 func normalizeCapturesAttr(s string) string {
 	s = capturesNoneAttrRe.ReplaceAllString(s, "nocapture $1")
 	s = strings.ReplaceAll(s, "captures(none)", "nocapture")
+	// Other captures(...) forms have no pre-LLVM21 equivalent and are not
+	// emitted there at all (see llvmutil.CapturesAttr), so drop them.
+	s = capturesOtherAttrRe.ReplaceAllString(s, "")
 	return s
 }
+
+// capturesOtherAttrRe matches a captures(...) attribute other than
+// captures(none), such as captures(ret: address, provenance).
+var capturesOtherAttrRe = regexp.MustCompile(` captures\([a-z_:, ]+\)`)
 
 // filterIrrelevantIRLines removes lines from the input slice of strings that
 // are not relevant in comparing IR. For example, empty lines and comments are
