@@ -16,7 +16,8 @@
     ],
     "ldflags": [
         "--defsym=__flash_size=2M",
-        "--defsym=__num_stacks=2"
+        "--defsym=__num_stacks=2",
+        "--defsym=__psram_size=0"
     ],
     "linkerscript": "targets/rp2350.ld",
     "openocd-interface": "picoprobe",
