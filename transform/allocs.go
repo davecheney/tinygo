@@ -235,6 +235,16 @@ func valueEscapesAtImpl(value llvm.Value, allowReturn bool, visiting map[llvm.Va
 			if !result.merge(callValueEscapesAt(use, value, allowReturn, visiting)) {
 				return result
 			}
+		case llvm.PtrToInt, llvmutil.PtrToAddr:
+			// Converting a pointer to an integer doesn't let it escape as
+			// long as the integer is only inspected locally (for example an
+			// alignment check). If it may be stored, passed to a call,
+			// returned or converted back to a pointer, treat it as an
+			// escape: the conservative GC could still find a stored uintptr
+			// and code may (invalidly) convert it back later.
+			if !intIsAddressOnly(use, map[llvm.Value]struct{}{}) {
+				return escapeResult{escapeAt: use}
+			}
 		case llvm.ICmp:
 			// Comparing pointers don't let the pointer escape.
 			// This is often a compiler-inserted nil check.

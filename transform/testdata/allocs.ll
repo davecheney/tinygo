@@ -110,6 +110,36 @@ define { i32, { ptr, ptr } } @wrapInAggregate(ptr %p) {
   ret { i32, { ptr, ptr } } %result
 }
 
+; An alignment check converts the pointer to an integer, but the integer is
+; only compared so the object doesn't escape.
+define i1 @testPtrToIntAlignCheck() {
+  %alloc = call align 4 ptr @runtime.alloc(i32 4, ptr inttoptr (i32 3 to ptr))
+  store i32 5, ptr %alloc
+  %addr = ptrtoint ptr %alloc to i32
+  %rem = urem i32 %addr, 8
+  %cmp = icmp eq i32 %rem, 0
+  ret i1 %cmp
+}
+
+@uintptrGlobal = global i32 0
+
+; Storing the integer lets the object escape: the conservative GC could still
+; find it, and it may be converted back to a pointer later.
+define void @testPtrToIntStored() {
+  %alloc = call align 4 ptr @runtime.alloc(i32 4, ptr inttoptr (i32 3 to ptr))
+  %addr = ptrtoint ptr %alloc to i32
+  %addr.8 = add i32 %addr, 8
+  store i32 %addr.8, ptr @uintptrGlobal
+  ret void
+}
+
+; Returning the integer lets the object escape.
+define i32 @testPtrToIntReturned() {
+  %alloc = call align 4 ptr @runtime.alloc(i32 4, ptr inttoptr (i32 3 to ptr))
+  %addr = ptrtoint ptr %alloc to i32
+  ret i32 %addr
+}
+
 declare ptr @escapeIntPtr(ptr)
 
 declare ptr @noescapeIntPtr(ptr nocapture)

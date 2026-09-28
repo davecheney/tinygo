@@ -2,6 +2,7 @@ target datalayout = "e-m:e-p:32:32-i64:64-v128:64:128-a:0:32-n32-S64"
 target triple = "armv7m-none-eabi"
 
 @runtime.zeroSizedAlloc = internal global i8 0, align 1
+@uintptrGlobal = global i32 0
 
 declare nonnull ptr @runtime.alloc(i32, ptr)
 
@@ -104,6 +105,30 @@ define { i32, { ptr, ptr } } @wrapInAggregate(ptr %p) {
   %itf = insertvalue { ptr, ptr } { ptr null, ptr undef }, ptr %p, 1
   %result = insertvalue { i32, { ptr, ptr } } { i32 1, { ptr, ptr } undef }, { ptr, ptr } %itf, 1
   ret { i32, { ptr, ptr } } %result
+}
+
+define i1 @testPtrToIntAlignCheck() {
+  %stackalloc = alloca [4 x i8], align 4
+  store [4 x i8] zeroinitializer, ptr %stackalloc, align 4
+  store i32 5, ptr %stackalloc, align 4
+  %addr = ptrtoint ptr %stackalloc to i32
+  %rem = urem i32 %addr, 8
+  %cmp = icmp eq i32 %rem, 0
+  ret i1 %cmp
+}
+
+define void @testPtrToIntStored() {
+  %alloc = call align 4 ptr @runtime.alloc(i32 4, ptr inttoptr (i32 3 to ptr))
+  %addr = ptrtoint ptr %alloc to i32
+  %addr.8 = add i32 %addr, 8
+  store i32 %addr.8, ptr @uintptrGlobal, align 4
+  ret void
+}
+
+define i32 @testPtrToIntReturned() {
+  %alloc = call align 4 ptr @runtime.alloc(i32 4, ptr inttoptr (i32 3 to ptr))
+  %addr = ptrtoint ptr %alloc to i32
+  ret i32 %addr
 }
 
 declare ptr @escapeIntPtr(ptr)
