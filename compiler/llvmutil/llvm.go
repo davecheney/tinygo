@@ -285,6 +285,17 @@ func RemoveGlobalReferences(mod llvm.Module, targetGlobal, referenceGlobal strin
 	})
 }
 
+// Opcodes that go-llvm does not (yet) define. The values are those of the
+// LLVMOpcode enum in llvm-c/Core.h, which is stable across LLVM versions.
+const (
+	// Freeze is the freeze instruction (LLVM 10+).
+	Freeze llvm.Opcode = 68
+
+	// PtrToAddr is the ptrtoaddr instruction, which was added in LLVM 22. It
+	// must only be used when Version() >= 22.
+	PtrToAddr llvm.Opcode = 69
+)
+
 // Version returns the LLVM major version.
 func Version() int {
 	majorStr := strings.Split(llvm.Version, ".")[0]
