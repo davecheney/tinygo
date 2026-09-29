@@ -150,6 +150,25 @@ func (c *Config) BuildTags() []string {
 	return tags
 }
 
+// VerifyRuntimeStress checks internal stress options against the resolved
+// collector.
+func (c *Config) VerifyRuntimeStress() error {
+	for _, tag := range c.BuildTags() {
+		switch tag {
+		case "runtime_gcstress":
+			switch c.GC() {
+			case "conservative", "precise", "boehm":
+			default:
+				return fmt.Errorf("%s requires -gc=conservative, precise or boehm (got %s)", tag, c.GC())
+			}
+			if c.Scheduler() == "cores" {
+				return fmt.Errorf("%s is not validated with -scheduler=cores", tag)
+			}
+		}
+	}
+	return nil
+}
+
 // GC returns the garbage collection strategy in use on this platform. Valid
 // values are "none", "leaking", "conservative" and "precise".
 func (c *Config) GC() string {

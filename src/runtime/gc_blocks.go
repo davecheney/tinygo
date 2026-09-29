@@ -443,6 +443,10 @@ func alloc(size uintptr, layout unsafe.Pointer) unsafe.Pointer {
 	var ranGC bool
 	var grewHeap bool
 	var pointer unsafe.Pointer
+	if gcStress {
+		runGC()
+		ranGC = true
+	}
 	for {
 		pointer = popFreeRange(neededBlocks)
 		if pointer != nil {
