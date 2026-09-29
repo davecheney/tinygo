@@ -332,6 +332,7 @@ func TestBuild(t *testing.T) {
 		"finalizerlarge.go",
 		"float.go",
 		"gc.go",
+		"gc-register-root.go",
 		"generics.go",
 		"goroutines.go",
 		"init.go",
@@ -478,6 +479,7 @@ func TestBuild(t *testing.T) {
 			opts.Opt = "0"
 			emuCheck(t, opts)
 			runTestWithConfig("gc.go", t, opts, nil, nil)
+			runTestWithConfig("gc-register-root.go", t, opts, nil, nil)
 		})
 
 		t.Run("gc=none-runtime-panic", func(t *testing.T) {
