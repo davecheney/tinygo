@@ -81,3 +81,30 @@ func TestFixtureProcessHelper(t *testing.T) {
 		os.Exit(2)
 	}
 }
+
+func TestRuntimeStress(t *testing.T) {
+	if !*testRuntimeStress {
+		t.Skip("enable with -runtime-stress")
+	}
+	for _, gc := range []string{"conservative", "precise", "boehm"} {
+		t.Run(gc, func(t *testing.T) {
+			for _, opt := range []string{"0", "1", "2", "s", "z"} {
+				t.Run(opt, func(t *testing.T) {
+					options := optionsFromTarget(*testTarget, sema)
+					options.GC, options.Opt = gc, opt
+					options.Tags = []string{"runtime_asserts", "runtime_gcstress"}
+					emuCheck(t, options)
+					fixtures := []string{"gc.go", "gc-register-root.go", "zeroalloc.go", "gc-stress.go"}
+					if gc != "boehm" {
+						fixtures = append(fixtures, "finalizerinvariants.go")
+					}
+					for _, name := range fixtures {
+						t.Run(name, func(t *testing.T) {
+							runTest(name, options, t, nil, nil)
+						})
+					}
+				})
+			}
+		})
+	}
+}
