@@ -61,6 +61,9 @@ func NewConfig(options *compileopts.Options) (*compileopts.Config, error) {
 		GoMinorVersion: gorootMinor,
 		TestConfig:     options.TestConfig,
 	}
+	if err := config.VerifyRuntimeStress(); err != nil {
+		return nil, err
+	}
 	requestedPanicUnwind := options.PanicUnwind
 	if requestedPanicUnwind == "" {
 		requestedPanicUnwind = spec.PanicUnwind

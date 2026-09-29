@@ -78,6 +78,10 @@ func alloc(size uintptr, layout unsafe.Pointer) unsafe.Pointer {
 
 	gcLock.Lock()
 	gcMallocs++
+	if gcStress {
+		libgc_gcollect()
+		gcResumeWorld()
+	}
 	var ptr unsafe.Pointer
 	var needsZero bool
 	switch layout {
@@ -149,6 +153,10 @@ func allocManual(size uintptr) unsafe.Pointer {
 	}
 
 	gcLock.Lock()
+	if gcStress {
+		libgc_gcollect()
+		gcResumeWorld()
+	}
 	ptr := libgc_malloc_atomic_uncollectable(size)
 	gcResumeWorld()
 	gcLock.Unlock()
