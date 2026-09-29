@@ -33,6 +33,7 @@ import (
 	"github.com/tetratelabs/wazero/sys"
 	"github.com/tinygo-org/tinygo/builder"
 	"github.com/tinygo-org/tinygo/compileopts"
+	"github.com/tinygo-org/tinygo/compiler/llvmutil"
 	"github.com/tinygo-org/tinygo/diagnostics"
 	"github.com/tinygo-org/tinygo/goenv"
 )
@@ -42,6 +43,9 @@ const TESTDATA = "testdata"
 var testTarget = flag.String("target", "", "override test target")
 
 var testOnlyCurrentOS = flag.Bool("only-current-os", false, "")
+
+var testRunCount = flag.Int("run-count", 1, "bounded process repetitions per compiled fixture (1-1000)")
+var testRunTimeout = flag.Duration("run-timeout", 2*time.Minute, "timeout for each fixture process")
 
 var supportedLinuxArches = map[string]string{
 	"AMD64Linux": "linux/amd64",
@@ -929,6 +933,9 @@ func runTest(name string, options compileopts.Options, t *testing.T, cmdArgs, en
 
 func runTestWithConfig(name string, t *testing.T, options compileopts.Options, cmdArgs, environmentVars []string) {
 	t.Helper()
+	if *testRunCount < 1 || *testRunCount > 1000 || *testRunTimeout <= 0 {
+		t.Fatal("run-count must be in 1-1000 and run-timeout must be positive")
+	}
 	// Get the expected output for this test.
 	// Note: not using filepath.Join as it strips the path separator at the end
 	// of the path.
@@ -952,17 +959,49 @@ func runTestWithConfig(name string, t *testing.T, options compileopts.Options, c
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("reproduce: go test -tags=llvm%d -count=1 -run=%q -target=%q -runtime-stress=%t -run-count=%d -run-timeout=%s -shuffle=%s .",
+				llvmutil.Version(), "^"+regexp.QuoteMeta(t.Name())+"$", *testTarget, *testRuntimeStress,
+				*testRunCount, *testRunTimeout, flag.Lookup("test.shuffle").Value)
+		}
+	})
 
 	// Build the test binary.
 	stdout := &bytes.Buffer{}
-	_, err = buildAndRun(pkgName, config, stdout, cmdArgs, environmentVars, 2*time.Minute, func(cmd *exec.Cmd, result builder.BuildResult) error {
-		if config.EmulatorName() == "simavr" {
-			// simavr before v1.8 wrote firmware output to stderr and loader logs
-			// to stdout, but PR #490 swapped these streams:
-			// https://github.com/buserror/simavr/pull/490
-			cmd.Stdout = stdout
+	_, err = buildAndRun(pkgName, config, stdout, cmdArgs, environmentVars, 0, func(cmd *exec.Cmd, result builder.BuildResult) error {
+		for iteration := 1; iteration <= *testRunCount; iteration++ {
+			stdout.Reset()
+			stderr := &bytes.Buffer{}
+			err := runFixtureProcess(cmd, result.Executable, config.EmulatorName() == "simavr", stdout, stderr, *testRunTimeout)
+			if err != nil {
+				t.Logf("stderr:\n%s", stderr)
+				t.Logf("compiler=%s target=%s gc=%s scheduler=%s opt=%s tags=%v shuffle=%s iteration=%d command=%q",
+					testCompilerRevision(), config.Triple(), config.GC(), config.Scheduler(), options.Opt,
+					options.Tags, flag.Lookup("test.shuffle").Value, iteration, cmd.Args)
+				return err
+			}
+			actual := stdout.Bytes()
+			if config.EmulatorName() == "simavr" {
+				actual = cleanSimAVRTestOutput(actual)
+			}
+			if config.EmulatorName() == "qemu-system-xtensa" {
+				actual = cleanESP32QEMUOutput(actual)
+			}
+			if name == "testing.go" || name == "testing-verbose.go" {
+				// Strip actual time.
+				re := regexp.MustCompile(`\([0-9]\.[0-9][0-9]s\)`)
+				actual = re.ReplaceAllLiteral(actual, []byte{'(', '0', '.', '0', '0', 's', ')'})
+			}
+			checkOutput(t, expectedOutputPath, actual)
+			if t.Failed() {
+				t.Logf("compiler=%s target=%s gc=%s scheduler=%s opt=%s tags=%v shuffle=%s iteration=%d command=%q output:\n%s\nstderr:\n%s",
+					testCompilerRevision(), config.Triple(), config.GC(), config.Scheduler(), options.Opt,
+					options.Tags, flag.Lookup("test.shuffle").Value, iteration, cmd.Args, actual, stderr)
+				break
+			}
 		}
-		return cmd.Run()
+		return nil
 	})
 	if err != nil {
 		w := &bytes.Buffer{}
@@ -974,40 +1013,20 @@ func runTestWithConfig(name string, t *testing.T, options compileopts.Options, c
 			t.Logf("output:\n%s", stdout.String())
 		}
 		t.Fail()
-		return
-	}
-
-	actual := stdout.Bytes()
-	if config.EmulatorName() == "simavr" {
-		actual = cleanSimAVRTestOutput(actual)
-	}
-	if config.EmulatorName() == "qemu-system-xtensa" {
-		actual = cleanESP32QEMUOutput(actual)
-	}
-	if name == "testing.go" || name == "testing-verbose.go" {
-		// Strip actual time.
-		re := regexp.MustCompile(`\([0-9]\.[0-9][0-9]s\)`)
-		actual = re.ReplaceAllLiteral(actual, []byte{'(', '0', '.', '0', '0', 's', ')'})
-	}
-
-	// Check whether the command ran successfully.
-	if err != nil {
-		t.Error("failed to run:", err)
-	}
-	checkOutput(t, expectedOutputPath, actual)
-
-	if t.Failed() {
-		r := bufio.NewReader(bytes.NewReader(actual))
-		for {
-			line, err := r.ReadString('\n')
-			if err != nil {
-				break
-			}
-			t.Log("stdout:", line[:len(line)-1])
-		}
-		t.Fail()
 	}
 }
+
+var testCompilerRevision = sync.OnceValue(func() string {
+	head, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	if err != nil {
+		return goenv.Version()
+	}
+	revision := strings.TrimSpace(string(head))
+	if status, err := exec.Command("git", "status", "--porcelain", "--untracked-files=no").Output(); err != nil || len(status) != 0 {
+		revision += "+dirty"
+	}
+	return revision
+})
 
 func cleanESP32QEMUOutput(output []byte) []byte {
 	entryLine := bytes.Index(output, []byte("\nentry "))
