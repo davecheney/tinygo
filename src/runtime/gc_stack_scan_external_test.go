@@ -12,3 +12,9 @@ func TestGCStackScanEnd(t *testing.T) {
 		t.Fatal(failure)
 	}
 }
+
+func TestGCStackDeadFrame(t *testing.T) {
+	if failure := runtime.GCStackDeadFrameProbe(); failure != "" {
+		t.Fatal(failure)
+	}
+}
