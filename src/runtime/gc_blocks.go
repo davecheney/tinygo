@@ -699,7 +699,6 @@ func scanConservative(addr, len uintptr) {
 }
 
 func markCurrentGoroutineStack(sp uintptr) {
-	markRoot(0, sp)
 	if !isOnHeap(sp) {
 		return
 	}
@@ -708,10 +707,12 @@ func markCurrentGoroutineStack(sp uintptr) {
 		// findHead needs an allocated block.
 		return
 	}
-
-	// Scan the live part now. The callee-saved registers pushed by
-	// scanCurrentStack are gone by the time finishMark scans the stack object.
 	head := block.findHead()
+
+	// Mark the stack without queueing it, then scan only the part in use. The
+	// callee-saved registers pushed by scanCurrentStack are gone once
+	// finishMark runs, and everything below sp is a returned frame.
+	head.setState(blockStateMark)
 	markRoots(sp, head.address()+bytesPerBlock-unsafe.Sizeof(objHeader{}))
 }
 
