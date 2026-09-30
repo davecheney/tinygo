@@ -61,6 +61,7 @@ TEST_PACKAGES_FAST = \
 	path \
 	reflect \
 	regexp/syntax \
+	runtime \
 	strconv \
 	sync \
 	testing \
@@ -159,6 +160,7 @@ TEST_PACKAGES_NONBAREMETAL = \
 	$(TEST_PACKAGES_NOBOUNDARYSLICES) \
 	crypto/des \
 	regexp/syntax \
+	runtime \
 	$(nil)
 
 TEST_PACKAGES_FAST_WASI = $(filter-out $(TEST_PACKAGES_NOWASI), $(TEST_PACKAGES_FAST))
@@ -261,11 +263,17 @@ endif
 ifeq ($(TEST_IOFS),true)
 	$(TINYGO) test -stack-size=6MB io/fs
 endif
+	@# The block GC is not the host default, so run its own tests against it
+	@# with the GC assertions enabled.
+	$(TINYGO) test -tags=runtime_asserts -gc=conservative -scheduler=tasks runtime
 tinygo-test-fast:
 	$(TINYGO) test $(TEST_SKIP_FLAG) $(filter-out $(TEST_PACKAGES_ALLOCS_HOST),$(TEST_PACKAGES_HOST))
 ifneq ($(TEST_PACKAGES_ALLOCS_HOST),)
 	$(TINYGO) test $(TEST_ALLOCS_SKIP_FLAG) $(TEST_PACKAGES_ALLOCS_HOST)
 endif
+	@# The block GC is not the host default, so run its own tests against it
+	@# with the GC assertions enabled.
+	$(TINYGO) test -tags=runtime_asserts -gc=conservative -scheduler=tasks runtime
 tinygo-bench:
 	$(TINYGO) test -bench . $(TEST_PACKAGES_HOST) $(TEST_PACKAGES_SLOW)
 tinygo-bench-fast:
