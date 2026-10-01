@@ -164,6 +164,10 @@ func (c *Config) VerifyRuntimeStress() error {
 			if c.Scheduler() == "cores" {
 				return fmt.Errorf("%s is not validated with -scheduler=cores", tag)
 			}
+		case "runtime_clobberfree":
+			if c.GC() != "conservative" && c.GC() != "precise" {
+				return fmt.Errorf("%s requires -gc=conservative or precise (got %s)", tag, c.GC())
+			}
 		}
 	}
 	return nil

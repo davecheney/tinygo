@@ -798,6 +798,11 @@ func sweep() uintptr {
 		freeEnd := block
 		for block > 0 && (block-1).state() != blockStateMark {
 			block--
+			if clobberFree && block.state() != blockStateFree {
+				for offset := uintptr(0); offset < bytesPerBlock; offset += 4 {
+					*(*uint32)(unsafe.Add(block.pointer(), offset)) = 0xdeadbeef
+				}
+			}
 			block.free()
 		}
 
