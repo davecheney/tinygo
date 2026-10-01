@@ -90,17 +90,33 @@ func TestRuntimeStress(t *testing.T) {
 		t.Run(gc, func(t *testing.T) {
 			for _, opt := range []string{"0", "1", "2", "s", "z"} {
 				t.Run(opt, func(t *testing.T) {
-					options := optionsFromTarget(*testTarget, sema)
-					options.GC, options.Opt = gc, opt
-					options.Tags = []string{"runtime_asserts", "runtime_gcstress"}
-					emuCheck(t, options)
-					fixtures := []string{"gc.go", "gc-register-root.go", "zeroalloc.go", "gc-stress.go"}
-					if gc != "boehm" {
-						fixtures = append(fixtures, "finalizerinvariants.go")
-					}
-					for _, name := range fixtures {
-						t.Run(name, func(t *testing.T) {
-							runTest(name, options, t, nil, nil)
+					for _, mode := range []string{"collect", "clobber", "both"} {
+						if gc == "boehm" && mode != "collect" {
+							continue
+						}
+						t.Run(mode, func(t *testing.T) {
+							options := optionsFromTarget(*testTarget, sema)
+							options.GC, options.Opt = gc, opt
+							options.Tags = []string{"runtime_asserts"}
+							if mode != "clobber" {
+								options.Tags = append(options.Tags, "runtime_gcstress")
+							}
+							if mode != "collect" {
+								options.Tags = append(options.Tags, "runtime_clobberfree")
+							}
+							emuCheck(t, options)
+							fixtures := []string{"gc.go", "gc-register-root.go", "gc-root-stress.go", "zeroalloc.go"}
+							if mode != "clobber" {
+								fixtures = append(fixtures, "gc-stress.go")
+							}
+							if gc != "boehm" {
+								fixtures = append(fixtures, "finalizerinvariants.go")
+							}
+							for _, name := range fixtures {
+								t.Run(name, func(t *testing.T) {
+									runTest(name, options, t, nil, nil)
+								})
+							}
 						})
 					}
 				})
