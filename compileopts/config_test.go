@@ -36,7 +36,7 @@ func TestExtraFilesBoehm(t *testing.T) {
 
 func TestRuntimeStress(t *testing.T) {
 	for _, gc := range []string{"none", "leaking", "custom", "conservative", "precise", "boehm"} {
-		for _, tag := range []string{"runtime_gcstress"} {
+		for _, tag := range []string{"runtime_gcstress", "runtime_clobberfree"} {
 			for _, override := range []bool{false, true} {
 				config := &Config{Options: &Options{}, Target: &TargetSpec{GC: gc, BuildTags: []string{tag}}}
 				if override {
@@ -45,7 +45,7 @@ func TestRuntimeStress(t *testing.T) {
 					config.Target.BuildTags = nil
 					config.Options.Tags = []string{tag}
 				}
-				wantOK := gc == "conservative" || gc == "precise" || gc == "boehm"
+				wantOK := gc == "conservative" || gc == "precise" || gc == "boehm" && tag == "runtime_gcstress"
 				if err := config.VerifyRuntimeStress(); (err == nil) != wantOK {
 					t.Errorf("gc=%s tag=%s override=%t: %v", gc, tag, override, err)
 				}
