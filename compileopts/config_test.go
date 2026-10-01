@@ -57,3 +57,25 @@ func TestRuntimeStress(t *testing.T) {
 		t.Error("runtime_gcstress accepted -scheduler=cores")
 	}
 }
+
+func TestPoisonStackAllocs(t *testing.T) {
+	for _, tc := range []struct {
+		triple, opt string
+		ok          bool
+	}{
+		{"arm64-apple-macosx11.0.0", "z", true},
+		{"aarch64-unknown-linux", "1", true},
+		{"thumbv7m-unknown-unknown-eabi", "s", true},
+		{"wasm32-unknown-wasi", "2", true},
+		{"riscv32-unknown-none", "z", true},
+		{"arm64-apple-macosx11.0.0", "0", false},
+		{"x86_64-unknown-linux", "z", false},
+		{"avr", "z", false},
+		{"xtensa", "z", false},
+	} {
+		config := &Config{Options: &Options{PoisonStackAllocs: true, Opt: tc.opt}, Target: &TargetSpec{Triple: tc.triple}}
+		if err := config.VerifyRuntimeStress(); (err == nil) != tc.ok {
+			t.Errorf("triple=%s opt=%s: %v", tc.triple, tc.opt, err)
+		}
+	}
+}

@@ -151,8 +151,20 @@ func (c *Config) BuildTags() []string {
 }
 
 // VerifyRuntimeStress checks internal stress options against the resolved
-// collector.
+// target, optimization level and collector.
 func (c *Config) VerifyRuntimeStress() error {
+	if c.Options.PoisonStackAllocs {
+		arch, _, _ := strings.Cut(c.Triple(), "-")
+		switch {
+		case arch == "arm64", arch == "aarch64", arch == "wasm32", arch == "riscv32":
+		case strings.HasPrefix(arch, "arm"), strings.HasPrefix(arch, "thumb"):
+		default:
+			return fmt.Errorf("internal-poison-stackallocs is not validated for %s", c.Triple())
+		}
+		if _, speed, _ := c.OptLevel(); speed == 0 {
+			return fmt.Errorf("internal-poison-stackallocs requires -opt=1, 2, s or z")
+		}
+	}
 	for _, tag := range c.BuildTags() {
 		switch tag {
 		case "runtime_gcstress":

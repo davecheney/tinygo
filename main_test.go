@@ -976,9 +976,9 @@ func runTestWithConfig(name string, t *testing.T, options compileopts.Options, c
 			err := runFixtureProcess(cmd, result.Executable, config.EmulatorName() == "simavr", stdout, stderr, *testRunTimeout)
 			if err != nil {
 				t.Logf("stderr:\n%s", stderr)
-				t.Logf("compiler=%s target=%s gc=%s scheduler=%s opt=%s tags=%v shuffle=%s iteration=%d command=%q",
+				t.Logf("compiler=%s target=%s gc=%s scheduler=%s opt=%s tags=%v poison=%t shuffle=%s iteration=%d command=%q",
 					testCompilerRevision(), config.Triple(), config.GC(), config.Scheduler(), options.Opt,
-					options.Tags, flag.Lookup("test.shuffle").Value, iteration, cmd.Args)
+					options.Tags, options.PoisonStackAllocs, flag.Lookup("test.shuffle").Value, iteration, cmd.Args)
 				return err
 			}
 			actual := stdout.Bytes()
@@ -995,9 +995,9 @@ func runTestWithConfig(name string, t *testing.T, options compileopts.Options, c
 			}
 			checkOutput(t, expectedOutputPath, actual)
 			if t.Failed() {
-				t.Logf("compiler=%s target=%s gc=%s scheduler=%s opt=%s tags=%v shuffle=%s iteration=%d command=%q output:\n%s\nstderr:\n%s",
+				t.Logf("compiler=%s target=%s gc=%s scheduler=%s opt=%s tags=%v poison=%t shuffle=%s iteration=%d command=%q output:\n%s\nstderr:\n%s",
 					testCompilerRevision(), config.Triple(), config.GC(), config.Scheduler(), options.Opt,
-					options.Tags, flag.Lookup("test.shuffle").Value, iteration, cmd.Args, actual, stderr)
+					options.Tags, options.PoisonStackAllocs, flag.Lookup("test.shuffle").Value, iteration, cmd.Args, actual, stderr)
 				break
 			}
 		}
