@@ -45,6 +45,7 @@ type Options struct {
 	PrintIR                 bool
 	DumpSSA                 bool
 	VerifyIR                bool
+	PoisonStackAllocs       bool // internal-poison-stackallocs
 	SkipDWARF               bool
 	PrintCommands           func(cmd string, args ...string) `json:"-"`
 	Semaphore               chan struct{}                    `json:"-"` // -p flag controls cap

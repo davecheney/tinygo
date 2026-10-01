@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tinygo-org/tinygo/builder"
 )
 
 var testRuntimeStress = flag.Bool("runtime-stress", false, "run the opt-in runtime stress matrix")
@@ -117,6 +119,35 @@ func TestRuntimeStress(t *testing.T) {
 									runTest(name, options, t, nil, nil)
 								})
 							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestStackPoison(t *testing.T) {
+	if !*testRuntimeStress {
+		t.Skip("enable with -runtime-stress")
+	}
+	for _, opt := range []string{"1", "2", "s", "z"} {
+		t.Run(opt, func(t *testing.T) {
+			for _, gc := range []string{"", "conservative", "precise"} {
+				t.Run("gc="+gc, func(t *testing.T) {
+					options := optionsFromTarget(*testTarget, sema)
+					options.Opt, options.PoisonStackAllocs = opt, true
+					if gc != "" {
+						options.GC = gc
+						options.Tags = []string{"runtime_asserts", "runtime_gcstress", "runtime_clobberfree"}
+					}
+					if _, err := builder.NewConfig(&options); err != nil && strings.Contains(err.Error(), "not validated") {
+						t.Skip(err)
+					}
+					emuCheck(t, options)
+					for _, name := range []string{"stack-poison.go", "calls.go", "gc.go", "interface.go"} {
+						t.Run(name, func(t *testing.T) {
+							runTest(name, options, t, nil, nil)
 						})
 					}
 				})

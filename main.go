@@ -1817,6 +1817,7 @@ func main() {
 	printIR := flag.Bool("internal-printir", false, "print LLVM IR")
 	dumpSSA := flag.Bool("internal-dumpssa", false, "dump internal Go SSA")
 	verifyIR := flag.Bool("internal-verifyir", false, "run extra verification steps on LLVM IR")
+	poisonStackAllocs := flag.Bool("internal-poison-stackallocs", false, "poison stack-promoted allocations at normal returns (experimental)")
 	// Don't generate debug information in the IR, to make IR more readable.
 	// You generally want debug information in IR for various features, like
 	// stack size calculation and features like -size=short, -print-allocs=,
@@ -1935,6 +1936,7 @@ func main() {
 		PrintIR:                 *printIR,
 		DumpSSA:                 *dumpSSA,
 		VerifyIR:                *verifyIR,
+		PoisonStackAllocs:       *poisonStackAllocs,
 		SkipDWARF:               *skipDwarf,
 		Semaphore:               make(chan struct{}, *parallelism),
 		Debug:                   !*nodebug,

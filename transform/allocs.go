@@ -24,6 +24,10 @@ import (
 // heap allocation explanation should be printed (why the object can't be stack
 // allocated).
 func OptimizeAllocs(mod llvm.Module, printAllocs *regexp.Regexp, maxStackAlloc uint64, logger func(token.Position, string)) {
+	optimizeAllocs(mod, printAllocs, maxStackAlloc, logger, false)
+}
+
+func optimizeAllocs(mod llvm.Module, printAllocs *regexp.Regexp, maxStackAlloc uint64, logger func(token.Position, string), poison bool) {
 	// Find allocator functions.
 	var allocators []llvm.Value
 	for _, name := range []string{"runtime.alloc", "runtime.alloc_noheap"} {
@@ -128,6 +132,9 @@ func OptimizeAllocs(mod llvm.Module, printAllocs *regexp.Regexp, maxStackAlloc u
 		allocaType := llvm.ArrayType(mod.Context().Int8Type(), int(size))
 		alloca := builder.CreateAlloca(allocaType, "stackalloc")
 		alloca.SetAlignment(alignment)
+		if poison {
+			alloca.SetMetadata(ctx.MDKindID("tinygo.stackalloc"), ctx.MDNode(nil))
+		}
 
 		// Zero the allocation inside the block where the value was originally allocated.
 		zero := llvm.ConstNull(alloca.AllocatedType())
