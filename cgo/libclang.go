@@ -26,17 +26,11 @@ import (
 #include <stdlib.h>
 #include <stdint.h>
 
-static int tinygo_clang_needsCanonicalType(enum CXTypeKind kind) {
-	switch (kind) {
-	case CXType_Unexposed:
 #if LLVM_VERSION_MAJOR >= 23
-	case CXType_PredefinedSugar:
+#define tinygo_CXType_PredefinedSugar CXType_PredefinedSugar
+#else
+#define tinygo_CXType_PredefinedSugar CXType_Unexposed
 #endif
-		return 1;
-	default:
-		return 0;
-	}
-}
 
 // This struct should be ABI-compatible on all platforms (uintptr_t has the same
 // alignment etc. as void*) but does not include void* pointers that are not
@@ -706,9 +700,9 @@ func (f *cgoFile) makeDecayingASTType(typ C.CXType, pos token.Pos) ast.Expr {
 // makeASTType return the ast.Expr for the given libclang type. In other words,
 // it converts a libclang type to a type in the Go AST.
 func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
-	if C.tinygo_clang_needsCanonicalType(typ.kind) != 0 {
+	if typ.kind == C.CXType_Unexposed || typ.kind == C.tinygo_CXType_PredefinedSugar {
 		canonical := C.clang_getCanonicalType(typ)
-		if canonical.kind != C.CXType_Invalid && C.tinygo_clang_needsCanonicalType(canonical.kind) == 0 {
+		if canonical.kind != C.CXType_Invalid && canonical.kind != C.CXType_Unexposed && canonical.kind != C.tinygo_CXType_PredefinedSugar {
 			return f.makeASTType(canonical, pos)
 		}
 	}
