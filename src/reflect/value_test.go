@@ -59,6 +59,29 @@ func TestNewAt(t *testing.T) {
 	if value != 23 {
 		t.Fatalf("NewAt value = %d, want 23", value)
 	}
+	if !v.Elem().CanAddr() || !v.Elem().CanSet() {
+		t.Fatal("NewAt element is not addressable and settable")
+	}
+	if got := v.Elem().Addr().Interface(); got != v.Interface() {
+		t.Fatalf("address of NewAt element = %v, want %v", got, v.Interface())
+	}
+
+	type composite struct {
+		Value   int
+		Pointer *int
+	}
+	pointed := 1
+	compositeValue := composite{Value: 42, Pointer: &pointed}
+	compositePointer := NewAt(TypeOf(compositeValue), unsafe.Pointer(&compositeValue))
+	compositePointer.Elem().Field(0).SetInt(23)
+	if compositeValue.Value != 23 {
+		t.Fatalf("NewAt struct field = %d, want 23", compositeValue.Value)
+	}
+	other := 2
+	compositePointer.Elem().Field(1).Set(ValueOf(&other))
+	if compositeValue.Pointer != &other {
+		t.Fatalf("NewAt pointer field = %p, want %p", compositeValue.Pointer, &other)
+	}
 
 	nilValue := NewAt(TypeOf(value), nil)
 	if !nilValue.IsNil() {
