@@ -30,7 +30,7 @@ entry:
   br i1 %.not, label %lookup.next, label %lookup.throw
 
 lookup.next:                                      ; preds = %entry
-  %0 = getelementptr inbounds [4 x i8], ptr %ints.data, i32 %index
+  %0 = getelementptr inbounds i32, ptr %ints.data, i32 %index
   %1 = load i32, ptr %0, align 4
   ret i32 %1
 
@@ -95,7 +95,7 @@ entry:
   ret i32 %copy.n
 }
 
-; Function Attrs: nocallback nofree nounwind speculatable willreturn memory(none)
+; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare i32 @llvm.umin.i32(i32, i32) #3
 
 ; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)
@@ -364,6 +364,6 @@ unwind.return:                                    ; preds = %unsafe.Slice.throw
 attributes #0 = { "target-features"="+bulk-memory,+bulk-memory-opt,+call-indirect-overlong,+mutable-globals,+nontrapping-fptoint,+sign-ext,-multivalue,-reference-types" }
 attributes #1 = { nounwind "target-features"="+bulk-memory,+bulk-memory-opt,+call-indirect-overlong,+mutable-globals,+nontrapping-fptoint,+sign-ext,-multivalue,-reference-types" }
 attributes #2 = { allockind("alloc,zeroed") allocsize(0) "alloc-family"="runtime.alloc" "target-features"="+bulk-memory,+bulk-memory-opt,+call-indirect-overlong,+mutable-globals,+nontrapping-fptoint,+sign-ext,-multivalue,-reference-types" }
-attributes #3 = { nocallback nofree nounwind speculatable willreturn memory(none) }
+attributes #3 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
 attributes #4 = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }
 attributes #5 = { nounwind }

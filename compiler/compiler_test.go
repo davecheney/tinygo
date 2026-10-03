@@ -5,6 +5,7 @@ import (
 	"go/scanner"
 	"go/types"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -12,13 +13,15 @@ import (
 	"testing"
 
 	"github.com/tinygo-org/tinygo/compileopts"
+	"github.com/tinygo-org/tinygo/compiler/llvmutil"
 	"github.com/tinygo-org/tinygo/goenv"
 	"github.com/tinygo-org/tinygo/loader"
 	"github.com/tinygo-org/tinygo/transform"
 	"tinygo.org/x/go-llvm"
 )
 
-// Pass -update to go test to update the output of the test files.
+// Pass -update to go test to update output for the current LLVM version.
+// LLVM versions below 23 use testdata/llvm22 overrides where present.
 var flagUpdate = flag.Bool("update", false, "update tests based on test output")
 
 type testCase struct {
@@ -114,7 +117,10 @@ func TestCompiler(t *testing.T) {
 			if tc.scheduler != "" {
 				outFilePrefix += "-" + tc.scheduler
 			}
-			outPath := "./testdata/" + outFilePrefix + ".ll"
+			outPath, err := goldenFilePath("./testdata/"+outFilePrefix+".ll", llvmutil.Version())
+			if err != nil {
+				t.Fatal("failed to select golden file:", err)
+			}
 
 			// Update test if needed. Do not check the result.
 			if *flagUpdate {
@@ -135,6 +141,19 @@ func TestCompiler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func goldenFilePath(path string, llvmVersion int) (string, error) {
+	if llvmVersion >= 23 {
+		return path, nil
+	}
+	legacyPath := filepath.Join(filepath.Dir(path), "llvm22", filepath.Base(path))
+	if _, err := os.Stat(legacyPath); err == nil {
+		return legacyPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	return path, nil
 }
 
 func TestOptimizedLargeAggregateABI(t *testing.T) {
