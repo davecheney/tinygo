@@ -246,3 +246,5 @@ func adjustCoreVoltage() bool {
 	rp.VREG_AND_CHIP_RESET.SetVREG_VSEL(vreg)
 	return true
 }
+
+func initPSRAM() {}

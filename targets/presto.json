@@ -1,0 +1,9 @@
+{
+    "inherits": ["rp2350b"],
+    "build-tags": ["presto", "rp2350_psram"],
+    "ldflags": [
+        "--defsym=__flash_size=16M",
+        "--defsym=__psram_size=8M"
+    ],
+    "default-stack-size": 8192
+}

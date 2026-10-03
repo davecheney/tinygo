@@ -62,6 +62,8 @@ func machineInit() {
 	// DBGPAUSE pauses the timer when a debugger is connected. This prevents
 	// sleep functions from ever returning, so disable it.
 	timer.setDbgPause(false)
+
+	initPSRAM()
 }
 
 //go:linkname ticks runtime.machineTicks

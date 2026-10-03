@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -244,5 +246,36 @@ func TestConfigPanicUnwind(t *testing.T) {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestRP2350PSRAMTargets(t *testing.T) {
+	spec, err := LoadTarget(&Options{Target: "presto"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(spec.BuildTags, "rp2350_psram") {
+		t.Errorf("presto build tags %v do not include rp2350_psram", spec.BuildTags)
+	}
+	// The last --defsym wins in the linker, so the board must override the
+	// rp2350 default of zero.
+	var psram string
+	for _, flag := range spec.LDFlags {
+		if v, ok := strings.CutPrefix(flag, "--defsym=__psram_size="); ok {
+			psram = v
+		}
+	}
+	if psram != "8M" {
+		t.Errorf("presto __psram_size = %q, want 8M", psram)
+	}
+
+	for _, name := range []string{"pico2", "pico-plus2", "tufty2350", "pga2350"} {
+		spec, err := LoadTarget(&Options{Target: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(spec.BuildTags, "rp2350_psram") {
+			t.Errorf("%s unexpectedly enables rp2350_psram", name)
+		}
 	}
 }
