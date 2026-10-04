@@ -30,7 +30,7 @@ entry:
   br i1 %.not, label %lookup.next, label %lookup.throw
 
 lookup.next:                                      ; preds = %entry
-  %0 = getelementptr inbounds i32, ptr %ints.data, i32 %index
+  %0 = getelementptr inbounds [4 x i8], ptr %ints.data, i32 %index
   %1 = load i32, ptr %0, align 4
   ret i32 %1
 
