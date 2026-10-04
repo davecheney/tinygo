@@ -2,8 +2,10 @@ package compiler
 
 import (
 	"flag"
+	"fmt"
 	"go/scanner"
 	"go/types"
+	"math"
 	"os"
 	"regexp"
 	"slices"
@@ -118,7 +120,7 @@ func TestCompiler(t *testing.T) {
 
 			// Update test if needed. Do not check the result.
 			if *flagUpdate {
-				err := os.WriteFile(outPath, []byte(normalizeIR(mod.String())), 0666)
+				err := os.WriteFile(outPath, []byte(normalizeIR(irString(mod))), 0666)
 				if err != nil {
 					t.Error("failed to write updated output file:", err)
 				}
@@ -130,7 +132,7 @@ func TestCompiler(t *testing.T) {
 				t.Fatal("failed to read golden file:", err)
 			}
 
-			if diff := diffIR(string(expected), mod.String()); diff != "" {
+			if diff := diffIR(string(expected), irString(mod)); diff != "" {
 				t.Errorf("output does not match expected output (re-run with -update to regenerate):\n%s", diff)
 			}
 		})
@@ -563,6 +565,54 @@ func normalizeIR(s string) string {
 	// written against the two-argument form still match.
 	s = lifetimeSizeArgRe.ReplaceAllString(s, "$1")
 
+	// LLVM 23 prints float constants as their raw bits (f0x4F800000) instead
+	// of the bits of the equivalent double (0x41F0000000000000).
+	s = floatBitsRe.ReplaceAllStringFunc(s, func(m string) string {
+		bits, _ := strconv.ParseUint(m[len("f0x"):], 16, 32)
+		f := float64(math.Float32frombits(uint32(bits)))
+		return fmt.Sprintf("0x%016X", math.Float64bits(f))
+	})
+
+	// Named types are only printed while something uses them, and LLVM 23's
+	// GEP canonicalization can leave a type unused.
+	s = namedTypeDefRe.ReplaceAllStringFunc(s, func(m string) string {
+		use := regexp.MustCompile(regexp.QuoteMeta(namedTypeDefRe.FindStringSubmatch(m)[1]) + `([^\w.$"]|$)`)
+		if len(use.FindAllStringIndex(s, -1)) > 1 {
+			return m
+		}
+		return ""
+	})
+
+	return s
+}
+
+// irString prints mod with single-index GEPs rewritten to index a byte array,
+// which is how LLVM 23 canonicalizes them.
+func irString(mod llvm.Module) string {
+	s := mod.String()
+	td := llvm.NewTargetData(mod.DataLayout())
+	defer td.Dispose()
+	for fn := mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
+		for bb := fn.FirstBasicBlock(); !bb.IsNil(); bb = llvm.NextBasicBlock(bb) {
+			for inst := bb.FirstInstruction(); !inst.IsNil(); inst = llvm.NextInstruction(inst) {
+				if inst.IsAGetElementPtrInst().IsNil() || inst.OperandsCount() != 2 {
+					continue
+				}
+				typ := inst.GEPSourceElementType()
+				if typ.TypeKind() == llvm.ArrayTypeKind && typ.ElementType() == typ.Context().Int8Type() {
+					continue
+				}
+				size := td.TypeAllocSize(typ)
+				if size == 1 {
+					continue
+				}
+				line := inst.String()
+				start, end := gepTypeSpan(line)
+				canonical := line[:start] + fmt.Sprintf("[%d x i8]", size) + line[end:]
+				s = strings.Replace(s, line+"\n", canonical+"\n", 1)
+			}
+		}
+	}
 	return s
 }
 
@@ -573,8 +623,8 @@ func normalizeIR(s string) string {
 // are trimmed, then the differing expected lines (prefixed "-") are shown
 // followed by the differing actual lines (prefixed "+").
 func diffIR(expected, actual string) string {
-	exp := filterIrrelevantIRLines(strings.Split(normalizeIR(expected), "\n"))
-	act := filterIrrelevantIRLines(strings.Split(normalizeIR(actual), "\n"))
+	exp := filterIrrelevantIRLines(strings.Split(inlineAttributeGroups(normalizeIR(expected)), "\n"))
+	act := filterIrrelevantIRLines(strings.Split(inlineAttributeGroups(normalizeIR(actual)), "\n"))
 
 	// Trim the common prefix.
 	start := 0
@@ -618,8 +668,62 @@ var capturesNoneAttrRe = regexp.MustCompile(`\b(readonly|readnone|writeonly|nonn
 // llvm.lifetime.start/end call or declaration, which LLVM 22 removed.
 var lifetimeSizeArgRe = regexp.MustCompile(`(@llvm\.lifetime\.(?:start|end)\.p0\()i64(?: immarg| \d+), `)
 
+// gepTypeSpan returns the position of the source element type in a printed
+// getelementptr instruction.
+func gepTypeSpan(line string) (start, end int) {
+	start = strings.Index(line, "getelementptr ") + len("getelementptr ")
+	for _, flag := range []string{"inbounds ", "nusw ", "nuw "} {
+		if strings.HasPrefix(line[start:], flag) {
+			start += len(flag)
+		}
+	}
+	depth := 0
+	for end = start; end < len(line); end++ {
+		switch line[end] {
+		case '{', '[', '<', '(':
+			depth++
+		case '}', ']', '>', ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				return start, end
+			}
+		}
+	}
+	return start, end
+}
+
+// floatBitsRe matches a float constant in the LLVM 23 raw bits spelling.
+var floatBitsRe = regexp.MustCompile(`\bf0x[0-9A-F]{8}\b`)
+
+// namedTypeDefRe matches a named type definition line.
+var namedTypeDefRe = regexp.MustCompile(`(?m)^(%[-\w.$"]+) = type .*\n`)
+
+// attributeGroupRe matches an attribute group definition line.
+var attributeGroupRe = regexp.MustCompile(`(?m)^attributes (#\d+) = (\{.*\})$`)
+
+// attributeRefRe matches a reference to an attribute group.
+var attributeRefRe = regexp.MustCompile(`\s#\d+\b`)
+
+// inlineAttributeGroups replaces each attribute group reference with the
+// attributes it contains, so the comparison does not depend on how LLVM
+// numbers and merges attribute groups.
+func inlineAttributeGroups(s string) string {
+	groups := make(map[string]string)
+	for _, m := range attributeGroupRe.FindAllStringSubmatch(s, -1) {
+		groups[m[1]] = m[2]
+	}
+	s = attributeGroupRe.ReplaceAllString(s, "")
+	return attributeRefRe.ReplaceAllStringFunc(s, func(m string) string {
+		if attrs, ok := groups[strings.TrimSpace(m)]; ok {
+			return m[:1] + attrs
+		}
+		return m
+	})
+}
+
 // nosyncAttrRe matches the standalone 'nosync' function attribute, which
-// LLVM 23 started inferring for llvm.memcpy/llvm.memmove declarations.
+// LLVM 23 no longer sets on intrinsics.
 var nosyncAttrRe = regexp.MustCompile(`\bnosync\s+`)
 
 // guidAttachmentRe matches the inline '!guid !N' metadata LLVM 23 attaches

@@ -4,7 +4,6 @@ target datalayout = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-n
 target triple = "wasm32-unknown-wasi"
 
 %main.hasPadding = type { i1, i32, i1 }
-%runtime._string = type { ptr, i32 }
 
 @"runtime/gc.layout:44-545555550500" = linkonce_odr unnamed_addr constant { i32, [6 x i8] } { i32 44, [6 x i8] c"TUUU\05\00" }
 @"runtime.hashmapType:struct{string; string}:int" = linkonce_odr unnamed_addr constant { ptr, ptr, ptr } { ptr inttoptr (i32 329 to ptr), ptr inttoptr (i32 3 to ptr), ptr @"runtime/gc.layout:44-545555550500" }
@@ -213,7 +212,7 @@ entry:
 hash.array.body:                                  ; preds = %hash.array.body, %entry
   %i = phi i32 [ 0, %entry ], [ %7, %hash.array.body ]
   %hash.acc = phi i32 [ 0, %entry ], [ %6, %hash.array.body ]
-  %4 = getelementptr inbounds nuw %runtime._string, ptr %0, i32 %i
+  %4 = getelementptr inbounds nuw [8 x i8], ptr %0, i32 %i
   %hash = call i32 @runtime.hashmapStringPtrHash(ptr %4, i32 8, i32 %2, ptr undef) #4
   %5 = mul i32 %hash.acc, 31
   %6 = xor i32 %5, %hash
@@ -232,8 +231,8 @@ entry:
 
 eq.array.body:                                    ; preds = %eq.array.body, %entry
   %i = phi i32 [ 0, %entry ], [ %6, %eq.array.body ]
-  %4 = getelementptr inbounds %runtime._string, ptr %0, i32 %i
-  %5 = getelementptr inbounds %runtime._string, ptr %1, i32 %i
+  %4 = getelementptr inbounds [8 x i8], ptr %0, i32 %i
+  %5 = getelementptr inbounds [8 x i8], ptr %1, i32 %i
   %x.str.unpack = load ptr, ptr %4, align 4
   %x.str.elt1 = getelementptr inbounds nuw i8, ptr %4, i32 4
   %x.str.unpack2 = load i32, ptr %x.str.elt1, align 4
