@@ -58,6 +58,7 @@ func Optimize(mod llvm.Module, config *compileopts.Config) []error {
 			// LLVM 17 doesn't have the no-verify-fixpoint flag.
 			optPasses = "globaldce,globalopt,ipsccp,instcombine,adce,function-attrs"
 		}
+		OptimizePtrToAddr(mod)
 		blockGlobalAllocPromotion(mod)
 		err := mod.RunPasses(optPasses, llvm.TargetMachine{}, po)
 		removeGlobalAllocPromotionMarker(mod)
@@ -82,6 +83,7 @@ func Optimize(mod llvm.Module, config *compileopts.Config) []error {
 		// After interfaces are lowered, there are many more opportunities for
 		// interprocedural optimizations. To get them to work, function
 		// attributes have to be updated first.
+		OptimizePtrToAddr(mod)
 		blockGlobalAllocPromotion(mod)
 		err = mod.RunPasses(optPasses, llvm.TargetMachine{}, po)
 		removeGlobalAllocPromotionMarker(mod)
@@ -181,6 +183,14 @@ func Optimize(mod llvm.Module, config *compileopts.Config) []error {
 		if err := mod.RunPasses("globaldce", llvm.TargetMachine{}, cleanupOptions); err != nil {
 			return []error{fmt.Errorf("could not run final globaldce pass: %w", err)}
 		}
+	}
+
+	if speedLevel > 0 {
+		// Inlining during the pre-link pipeline exposes many more ptrtoint
+		// instructions whose result is only inspected locally (for example
+		// pointer tag checks in reflect). Convert them now so that the
+		// ThinLTO backend can take advantage of it.
+		OptimizePtrToAddr(mod)
 	}
 
 	if config.Scheduler() == "none" {
