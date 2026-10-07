@@ -49,6 +49,14 @@ func init() {
 		commands["wasm-ld"] = append(commands["wasm-ld"], "C:\\Program Files\\LLVM\\bin\\wasm-ld.exe")
 		commands["lldb"] = append(commands["lldb"], "C:\\Program Files\\LLVM\\bin\\lldb.exe")
 	}
+	// Add the path to versioned LLVM packages on Arch Linux.
+	if runtime.GOOS == "linux" {
+		prefix := "/usr/lib/llvm" + llvmMajor + "/bin/"
+		commands["clang"] = append(commands["clang"], prefix+"clang-"+llvmMajor)
+		commands["ld.lld"] = append(commands["ld.lld"], prefix+"ld.lld")
+		commands["wasm-ld"] = append(commands["wasm-ld"], prefix+"wasm-ld")
+		commands["lldb"] = append(commands["lldb"], prefix+"lldb")
+	}
 	// Add the path to LLVM installed from ports.
 	if runtime.GOOS == "freebsd" {
 		prefix := "/usr/local/llvm" + llvmMajor + "/bin/"
