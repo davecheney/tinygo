@@ -375,10 +375,14 @@ func findSystemClangResources(TINYGOROOT string) string {
 	case "linux", "android":
 		// Header files are typically stored in /usr/lib/clang/<version>/include.
 		// Tested on Fedora 39, Debian 12, and Arch Linux.
-		path := filepath.Join("/usr/lib/clang", llvmMajor)
-		_, err := os.Stat(filepath.Join(path, "include", "stdint.h"))
-		if err == nil {
-			return path
+		for _, path := range []string{
+			filepath.Join("/usr/lib/clang", llvmMajor),
+			filepath.Join("/usr/lib/llvm"+llvmMajor, "lib/clang", llvmMajor),
+		} {
+			_, err := os.Stat(filepath.Join(path, "include", "stdint.h"))
+			if err == nil {
+				return path
+			}
 		}
 	case "darwin":
 		// This assumes a Homebrew installation, like in builder/commands.go.
