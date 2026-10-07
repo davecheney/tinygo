@@ -36,6 +36,7 @@ type functionInfo struct {
 	nobounds      bool       // go:nobounds
 	noescape      bool       // go:noescape
 	noheap        bool       // go:noheap
+	compiletime   bool       // go:compiletime
 	variadic      bool       // go:variadic (CGo only)
 	inline        inlineType // go:inline
 }
@@ -119,6 +120,9 @@ func (c *compilerContext) getFunction(fn *ssa.Function) (llvm.Type, llvm.Value) 
 
 	fnType := llvm.FunctionType(retType, paramTypes, info.variadic)
 	llvmFn = llvm.AddFunction(c.mod, info.linkName, fnType)
+	if info.compiletime {
+		llvmFn.AddFunctionAttr(c.ctx.CreateStringAttribute("tinygo-compiletime", ""))
+	}
 	if hasIndirectABI {
 		// Argument promotion only rewrites functions whose uses are all direct
 		// calls. Keep an address use so LLVM cannot reconstruct the large
@@ -553,6 +557,16 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 		case "//go:noheap":
 			// Ensure this function does not allocate on the heap.
 			info.noheap = true
+		case "//go:compiletime":
+			if len(parts) != 1 {
+				c.addError(comment.Slash, "//go:compiletime does not accept parameters")
+				continue
+			}
+			if f.Blocks == nil {
+				c.addError(comment.Slash, "can only use //go:compiletime on definitions")
+				continue
+			}
+			info.compiletime = true
 		case "//go:variadic":
 			// The //go:variadic pragma is emitted by the CGo preprocessing
 			// pass for C variadic functions. This includes both explicit

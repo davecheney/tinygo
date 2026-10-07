@@ -24,6 +24,7 @@ func TestErrors(t *testing.T) {
 	for _, tc := range []errorTest{
 		{name: "cgo"},
 		{name: "compiler"},
+		{name: "compiletime"},
 		{name: "interp"},
 		{name: "invalidmain"},
 		{name: "invalidname"},
