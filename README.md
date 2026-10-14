@@ -103,6 +103,10 @@ For more information:
 
 For a description of currently supported Go language features, please see [https://tinygo.org/lang-support/](https://tinygo.org/lang-support/).
 
+TinyGo does not support FIPS 140-3 mode. Standard crypto packages remain
+available, but `crypto/fips140.Enabled()` returns `false` and FIPS self-tests
+do not run. The `GODEBUG` setting `fips140` has no effect.
+
 ## Documentation
 
 Documentation is located on our web site at [https://tinygo.org/](https://tinygo.org/).

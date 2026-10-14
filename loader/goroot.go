@@ -269,6 +269,10 @@ func pathsToOverride(goMinor int, needsSyscallPackage bool) map[string]bool {
 		paths["crypto/internal/boring/sig/"] = false
 	}
 
+	if goMinor >= 24 {
+		paths["crypto/internal/fips140/"] = true
+	}
+
 	if goMinor >= 26 {
 		// Go 1.26 added a CPU jitter entropy source for FIPS 140-3 that
 		// allocates a 32 MiB global buffer (ScratchBuffer [1<<25]byte).
