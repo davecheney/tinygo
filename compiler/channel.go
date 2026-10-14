@@ -223,6 +223,7 @@ func (b *builder) createSelect(expr *ssa.Select) llvm.Value {
 	// determine the receive buffer size and alignment.
 	recvbufSize := uint64(0)
 	recvbufAlign := 0
+	hasSend := false
 	var selectStates []llvm.Value
 	chanSelectStateType := b.getLLVMRuntimeType("chanSelectState")
 	for _, state := range expr.States {
@@ -244,6 +245,7 @@ func (b *builder) createSelect(expr *ssa.Select) llvm.Value {
 			// in the send state.
 			alloca := b.getSelectSendStorage(state.Send)
 			selectState = b.CreateInsertValue(selectState, alloca, 1, "")
+			hasSend = true
 		default:
 			panic("unreachable")
 		}
@@ -279,7 +281,11 @@ func (b *builder) createSelect(expr *ssa.Select) llvm.Value {
 	}, "select.states")
 	statesLen := llvm.ConstInt(b.uintptrType, uint64(len(selectStates)), false)
 
-	// Do the select in the runtime.
+	// Do the select in the runtime. Only a send to a closed channel can panic.
+	createSelectCall := b.createRuntimeCall
+	if hasSend {
+		createSelectCall = b.createRuntimeInvoke
+	}
 	var results llvm.Value
 	if expr.Blocking {
 		// Stack-allocate operation structures.
@@ -292,7 +298,7 @@ func (b *builder) createSelect(expr *ssa.Select) llvm.Value {
 			llvm.ConstInt(b.ctx.Int32Type(), 0, false),
 		}, "select.block")
 
-		results = b.createRuntimeCall("chanSelect", []llvm.Value{
+		results = createSelectCall("chanSelect", []llvm.Value{
 			recvbuf,
 			statesPtr, statesLen, statesLen, // []chanSelectState
 			opsPtr, opsLen, opsLen, // []channelOp
@@ -303,7 +309,7 @@ func (b *builder) createSelect(expr *ssa.Select) llvm.Value {
 	} else {
 		opsPtr := llvm.ConstNull(b.dataPtrType)
 		opsLen := llvm.ConstInt(b.uintptrType, 0, false)
-		results = b.createRuntimeCall("chanSelect", []llvm.Value{
+		results = createSelectCall("chanSelect", []llvm.Value{
 			recvbuf,
 			statesPtr, statesLen, statesLen, // []chanSelectState
 			opsPtr, opsLen, opsLen, // []channelOp (nil slice)

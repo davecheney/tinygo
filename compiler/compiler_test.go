@@ -216,6 +216,31 @@ func TestLargeSliceElement(t *testing.T) {
 	}
 }
 
+func TestSelectSendDeferCheckpoint(t *testing.T) {
+	options := &compileopts.Options{GOOS: "linux", GOARCH: "amd64"}
+	mod, errs := testCompilePackage(t, options, "select-send-defer.go")
+	if len(errs) != 0 {
+		for _, err := range errs {
+			t.Error(err)
+		}
+		return
+	}
+	defer mod.Dispose()
+
+	fn := mod.NamedFunction("main.selectSendDefer")
+	if fn.IsNil() {
+		t.Fatal("missing function main.selectSendDefer")
+	}
+	ir := fn.String()
+	selectCall := strings.Index(ir, "@runtime.chanSelect(")
+	if selectCall < 0 {
+		t.Fatalf("missing runtime.chanSelect call:\n%s", ir)
+	}
+	if !strings.Contains(ir[:selectCall], "%setjmp") {
+		t.Errorf("select with a send case has no recover checkpoint:\n%s", ir)
+	}
+}
+
 func TestNonBlockingSelectLargeSend(t *testing.T) {
 	options := &compileopts.Options{Target: "wasm"}
 	mod, errs := testCompilePackage(t, options, "channel-nonblocking-large.go")
