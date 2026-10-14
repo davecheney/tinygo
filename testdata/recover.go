@@ -306,6 +306,11 @@ func recoverRuntimeError() {
 		m := map[interface{}]int{}
 		delete(m, []int{})
 	})
+	recoverMustPanic("unused map key", func() {
+		var s []int
+		m := make(map[interface{}]int)
+		m[s] = 1
+	})
 }
 
 func recoverRuntimeErrorMessages() {

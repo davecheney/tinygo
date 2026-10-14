@@ -14,7 +14,6 @@ func OptimizeMaps(mod llvm.Module) {
 
 	hashmapBinarySet := mod.NamedFunction("runtime.hashmapBinarySet")
 	hashmapStringSet := mod.NamedFunction("runtime.hashmapStringSet")
-	hashmapGenericSet := mod.NamedFunction("runtime.hashmapGenericSet")
 
 	optimizeMapMake := func(makeFunc llvm.Value) {
 		if makeFunc.IsNil() {
@@ -27,7 +26,9 @@ func OptimizeMaps(mod llvm.Module) {
 			for _, use := range getUses(makeInst) {
 				if use := use.IsACallInst(); !use.IsNil() {
 					switch use.CalledValue() {
-					case hashmapBinarySet, hashmapStringSet, hashmapGenericSet:
+					// hashmapGenericSet is not here because its key hash can
+					// panic, for example on an interface that holds a slice.
+					case hashmapBinarySet, hashmapStringSet:
 						updateInsts = append(updateInsts, use)
 					default:
 						unknownUses = true

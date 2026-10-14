@@ -12,6 +12,12 @@ declare void @runtime.hashmapStringSet(ptr nocapture, ptr, i32, ptr nocapture re
 ; func(map[string]int, string, unsafe.Pointer)
 declare i1 @runtime.hashmapStringGet(ptr nocapture, ptr, i32, ptr nocapture)
 
+; func(keySize, valueSize, sizeHint uintptr, typeInfo unsafe.Pointer, keyHash, keyEqual func) *runtime.hashmap
+declare nonnull ptr @runtime.hashmapMakeGeneric(i32, i32, i32, ptr, ptr, ptr, ptr, ptr)
+
+; func(m *runtime.hashmap, key, value unsafe.Pointer)
+declare void @runtime.hashmapGenericSet(ptr nocapture, ptr, ptr nocapture readonly)
+
 define void @testUnused() {
     ; create the map
     %map = call ptr @runtime.hashmapMake(i8 4, i8 4, i32 0)
@@ -42,6 +48,15 @@ define i32 @testReadonly() {
     %loadedValue = load i32, ptr %hashmap.value2
 
     ret i32 %loadedValue
+}
+
+; The key hash of a generic map can panic, so the map must stay.
+define void @testUnusedGeneric(ptr %key) {
+    %map = call ptr @runtime.hashmapMakeGeneric(i32 8, i32 4, i32 8, ptr null, ptr null, ptr null, ptr null, ptr null)
+    %hashmap.value = alloca i32
+    store i32 1, ptr %hashmap.value
+    call void @runtime.hashmapGenericSet(ptr %map, ptr %key, ptr %hashmap.value)
+    ret void
 }
 
 define ptr @testUsed() {

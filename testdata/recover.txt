@@ -54,6 +54,7 @@ outer recovered: repanic value
   recovered: map key
   recovered: map lookup key
   recovered: map delete key
+  recovered: unused map key
 
 # recover runtime error messages
   recovered runtime error: runtime error: invalid memory address or nil pointer dereference
