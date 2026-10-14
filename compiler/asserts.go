@@ -146,7 +146,12 @@ func (b *builder) createChanBoundsCheck(elementSize uint64, bufSize llvm.Value, 
 	}
 	// Make the maxBufSize actually the maximum allowed value (in number of
 	// elements in the channel buffer).
-	maxBufSize = b.CreateUDiv(maxBufSize, llvm.ConstInt(b.uintptrType, elementSize, false), "")
+	maxBufElements := maxBufSize.ZExtValue() / elementSize
+	if b.uintptrType.IntTypeWidth() > goHeapAddressBits {
+		// Match the maxAlloc limit of makechan in Go.
+		maxBufElements = min(maxBufElements, (uint64(1)<<goHeapAddressBits)/elementSize)
+	}
+	maxBufSize = llvm.ConstInt(b.uintptrType, maxBufElements, false)
 
 	// Make sure maxBufSize has the same type as bufSize.
 	if maxBufSize.Type() != bufSize.Type() {
