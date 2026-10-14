@@ -459,41 +459,44 @@ func (t *RawType) key() *RawType {
 // Field returns the type of the i'th field of this struct type. It panics if t
 // is not a struct type.
 func (t *RawType) Field(i int) StructField {
-	field := t.rawField(i)
+	descriptor, field := t.rawFieldDescriptor(i)
+	flagsByte := *(*byte)(field.data)
+	data, offset := field.nameAndOffset()
+	name := readStringZ(data)
 	return StructField{
-		Name:      field.Name,
-		PkgPath:   field.PkgPath,
-		Type:      field.Type, // note: converts RawType to Type
-		Tag:       field.Tag,
-		Anonymous: field.Anonymous,
-		Offset:    field.Offset,
+		Name:      name,
+		PkgPath:   structFieldPkgPath(descriptor, flagsByte),
+		Type:      field.fieldType,
+		Tag:       structFieldTag(unsafe.Add(data, len(name)), flagsByte),
+		Anonymous: flagsByte&structFieldFlagAnonymous != 0,
+		Offset:    uintptr(offset),
 		Index:     []int{i},
 	}
 }
 
-func rawStructFieldFromPointer(descriptor *structType, fieldType *RawType, data unsafe.Pointer, flagsByte uint8, name string, offset uint32) rawStructField {
-	// Read the field tag, if there is one.
-	var tag string
+func structFieldTag(data unsafe.Pointer, flagsByte uint8) StructTag {
 	if flagsByte&structFieldFlagHasTag != 0 {
 		data = unsafe.Add(data, 1) // C: data+1
 		tagLen, prefixLen := readUvarint(data)
 		data = unsafe.Add(data, prefixLen)
-		tag = unsafe.String((*byte)(data), tagLen)
+		return StructTag(unsafe.String((*byte)(data), tagLen))
 	}
+	return ""
+}
 
-	// Set the PkgPath to some (arbitrary) value if the package path is not
-	// exported.
-	pkgPath := ""
+func structFieldPkgPath(descriptor *structType, flagsByte uint8) string {
 	if flagsByte&structFieldFlagIsExported == 0 {
-		// This field is unexported.
-		pkgPath = readStringZ(unsafe.Pointer(descriptor.pkgpath))
+		return readStringZ(unsafe.Pointer(descriptor.pkgpath))
 	}
+	return ""
+}
 
+func rawStructFieldFromPointer(descriptor *structType, fieldType *RawType, data unsafe.Pointer, flagsByte uint8, name string, offset uint32) rawStructField {
 	return rawStructField{
 		Name:      name,
-		PkgPath:   pkgPath,
+		PkgPath:   structFieldPkgPath(descriptor, flagsByte),
 		Type:      fieldType,
-		Tag:       StructTag(tag),
+		Tag:       structFieldTag(data, flagsByte),
 		Anonymous: flagsByte&structFieldFlagAnonymous != 0,
 		Offset:    uintptr(offset),
 	}
@@ -504,6 +507,16 @@ func rawStructFieldFromPointer(descriptor *structType, fieldType *RawType, data 
 //
 // For internal use only.
 func (t *RawType) rawField(n int) rawStructField {
+	descriptor, field := t.rawFieldDescriptor(n)
+	flagsByte := *(*byte)(field.data)
+	data, offset := field.nameAndOffset()
+	name := readStringZ(data)
+	data = unsafe.Add(data, len(name))
+
+	return rawStructFieldFromPointer(descriptor, field.fieldType, data, flagsByte, name, offset)
+}
+
+func (t *RawType) rawFieldDescriptor(n int) (*structType, *structField) {
 	if t.Kind() != Struct {
 		panic(errTypeField)
 	}
@@ -512,24 +525,14 @@ func (t *RawType) rawField(n int) rawStructField {
 		panic("reflect: field index out of range")
 	}
 
-	// Iterate over all the fields to calculate the offset.
-	// This offset could have been stored directly in the array (to make the
-	// lookup faster), but by calculating it on-the-fly a bit of storage can be
-	// saved.
 	field := (*structField)(unsafe.Add(unsafe.Pointer(&descriptor.fields[0]), uintptr(n)*unsafe.Sizeof(structField{})))
-	data := field.data
+	return descriptor, field
+}
 
-	// Read some flags of this field, like whether the field is an embedded
-	// field. See structFieldFlagAnonymous and similar flags.
-	flagsByte := *(*byte)(data)
-	data = unsafe.Add(data, 1)
+func (field *structField) nameAndOffset() (unsafe.Pointer, uint32) {
+	data := unsafe.Add(field.data, 1)
 	offset, lenOffs := uvarint32(unsafe.Slice((*byte)(data), maxVarintLen32))
-	data = unsafe.Add(data, lenOffs)
-
-	name := readStringZ(data)
-	data = unsafe.Add(data, len(name))
-
-	return rawStructFieldFromPointer(descriptor, field.fieldType, data, flagsByte, name, offset)
+	return unsafe.Add(data, lenOffs), offset
 }
 
 // rawFieldByNameFunc returns nearly the same value as FieldByNameFunc but without converting the
