@@ -306,6 +306,26 @@ func TestLargeSliceElement32Bit(t *testing.T) {
 	mod.Dispose()
 }
 
+func TestLargeChanElement(t *testing.T) {
+	options := &compileopts.Options{GOOS: "linux", GOARCH: "amd64"}
+	mod, errs := testCompilePackage(t, options, "channel-large-element.go")
+	if len(errs) != 0 {
+		for _, err := range errs {
+			t.Error(err)
+		}
+		return
+	}
+	defer mod.Dispose()
+
+	fn := mod.NamedFunction("main.makeLargeElementChan")
+	if fn.IsNil() {
+		t.Fatal("missing function main.makeLargeElementChan")
+	}
+	if ir := fn.String(); !strings.Contains(ir, "icmp uge i64 %size, 8388608") {
+		t.Errorf("large element channel does not use the 48-bit allocation limit:\n%s", ir)
+	}
+}
+
 func TestNonBlockingSelectLargeSend(t *testing.T) {
 	options := &compileopts.Options{Target: "wasm"}
 	mod, errs := testCompilePackage(t, options, "channel-nonblocking-large.go")
