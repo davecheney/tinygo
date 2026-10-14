@@ -71,6 +71,11 @@ outer recovered: repanic value
   recovered: closed chan select
   recovered: close nil chan
 
+# recover from closed channel select in the same function
+  recovered nonblocking: true
+  receive after recover: 0 false
+  recovered blocking: true
+
 # recover from hardware signals
   recovered: divide by zero
   recovered: nil pointer dereference
