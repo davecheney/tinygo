@@ -39,6 +39,9 @@ var sectionParams int
 //go:extern a b
 var externParams int
 
+//go:section .text.foo
+func sectionDecl()
+
 func main() {
 	flagParams()
 	noescapeDef(nil)
@@ -54,6 +57,7 @@ func main() {
 	alignNotInt++
 	sectionParams++
 	externParams++
+	sectionDecl()
 }
 
 // ERROR: # command-line-arguments
@@ -70,3 +74,4 @@ func main() {
 // ERROR: pragma.go:33:1: //go:align parameter must be an integer
 // ERROR: pragma.go:36:1: expected one parameter to //go:section, not 2
 // ERROR: pragma.go:39:1: expected at most one parameter to //go:extern, not 2
+// ERROR: pragma.go:42:1: can only use //go:section on definitions

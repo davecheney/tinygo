@@ -385,11 +385,13 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 	if syntax == nil {
 		return
 	}
+	decl, _ := syntax.(*ast.FuncDecl)
+	hasBody := decl != nil && decl.Body != nil
 
 	// Read all pragmas of this function.
 	var pragmas []*ast.Comment
 	hasWasmExport := false
-	if decl, ok := syntax.(*ast.FuncDecl); ok && decl.Doc != nil {
+	if decl != nil && decl.Doc != nil {
 		for _, comment := range decl.Doc.List {
 			text := comment.Text
 			if strings.HasPrefix(text, "//go:") || strings.HasPrefix(text, "//export ") {
@@ -429,7 +431,7 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 		if file := c.fileForFunc(f); file != nil {
 			for _, group := range file.Comments {
 				// Skip the function's own doc comment — already handled above.
-				if decl, ok := syntax.(*ast.FuncDecl); ok && group == decl.Doc {
+				if decl != nil && group == decl.Doc {
 					continue
 				}
 				for _, comment := range group.List {
@@ -467,7 +469,7 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 			info.wasmName = info.linkName
 			info.exported = true
 		case "//go:interrupt":
-			if c.checkDefinition(f, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
+			if c.checkDefinition(hasBody, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
 				info.interrupt = true
 			}
 		case "//go:wasm-module":
@@ -484,8 +486,7 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 			if len(parts) != 3 {
 				continue
 			}
-			if f.Blocks != nil {
-				// Defined functions cannot be exported.
+			if hasBody {
 				c.addError(f.Pos(), "can only use //go:wasmimport on declarations")
 				continue
 			}
@@ -494,7 +495,7 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 			info.wasmModule = parts[1]
 			info.wasmName = parts[2]
 		case "//go:wasmexport":
-			if f.Blocks == nil {
+			if !hasBody {
 				c.addError(f.Pos(), "can only use //go:wasmexport on definitions")
 				continue
 			}
@@ -518,7 +519,7 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 			info.wasmExport = name
 			info.wasmExportPos = comment.Slash
 		case "//go:inline":
-			if c.checkDefinition(f, comment, pragma) {
+			if c.checkDefinition(hasBody, comment, pragma) {
 				info.inline = inlineHint
 			}
 		case "//go:noinline":
@@ -542,7 +543,7 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 				c.addPragmaError(comment, fmt.Sprintf("expected one parameter to //go:section, not %d", len(parts)-1))
 				continue
 			}
-			if c.checkDefinition(f, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
+			if c.checkDefinition(hasBody, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
 				info.section = parts[1]
 				info.inline = inlineNone
 			}
@@ -551,25 +552,25 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 			// runtime functions.
 			// This is somewhat dangerous and thus only imported in packages
 			// that import unsafe.
-			if c.checkDefinition(f, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
+			if c.checkDefinition(hasBody, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
 				info.nobounds = true
 			}
 		case "//go:noescape":
 			// Don't let pointer parameters escape.
 			// Following the upstream Go implementation, we only do this for
 			// declarations, not definitions.
-			if len(f.Blocks) != 0 {
+			if hasBody {
 				c.addPragmaError(comment, "can only use //go:noescape on declarations")
 				continue
 			}
 			info.noescape = true
 		case "//go:noheap":
 			// Ensure this function does not allocate on the heap.
-			if c.checkDefinition(f, comment, pragma) {
+			if c.checkDefinition(hasBody, comment, pragma) {
 				info.noheap = true
 			}
 		case "//go:noruntime":
-			if c.checkDefinition(f, comment, pragma) {
+			if c.checkDefinition(hasBody, comment, pragma) {
 				info.noruntime = true
 			}
 		case "//go:variadic":
@@ -613,8 +614,8 @@ func (c *compilerContext) addPragmaError(comment *ast.Comment, msg string) {
 
 // checkDefinition reports an error if the pragma is not on a function
 // definition.
-func (c *compilerContext) checkDefinition(f *ssa.Function, comment *ast.Comment, pragma string) bool {
-	if len(f.Blocks) == 0 {
+func (c *compilerContext) checkDefinition(hasBody bool, comment *ast.Comment, pragma string) bool {
+	if !hasBody {
 		c.addPragmaError(comment, "can only use "+pragma+" on definitions")
 		return false
 	}
