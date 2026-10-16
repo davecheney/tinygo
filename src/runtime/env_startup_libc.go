@@ -19,9 +19,7 @@ func startupEnv(key string) string {
 }
 
 func init() {
-	if gorootEnvEnabled() {
-		if value := startupEnv("GOROOT"); value != "" {
-			goroot = value
-		}
+	if value := startupEnv("GOROOT"); value != "" {
+		goroot = value
 	}
 }

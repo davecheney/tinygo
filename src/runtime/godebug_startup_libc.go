@@ -3,7 +3,5 @@
 package runtime
 
 func init() {
-	if godebugEnvEnabled() {
-		godebugStartup = startupEnv("GODEBUG")
-	}
+	godebugStartup = startupEnv("GODEBUG")
 }

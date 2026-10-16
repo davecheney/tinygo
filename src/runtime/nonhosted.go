@@ -54,14 +54,10 @@ func init() {
 		env = append(env, s[start:])
 	}
 
-	if gorootEnvEnabled() {
-		if value := startupEnv("GOROOT"); value != "" {
-			goroot = value
-		}
+	if value := startupEnv("GOROOT"); value != "" {
+		goroot = value
 	}
-	if godebugEnvEnabled() {
-		godebugStartup = startupEnv("GODEBUG")
-	}
+	godebugStartup = startupEnv("GODEBUG")
 }
 
 func startupEnv(key string) string {
