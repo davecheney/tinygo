@@ -335,7 +335,7 @@ func (mv *memoryView) load(p pointerValue, size uint32) value {
 // Store to the value behind the given pointer. This overwrites the value in the
 // memory view, so that the changed value is discarded when the memory view is
 // reverted. Returns true on success, false if the object to store to is
-// external.
+// external or if the store changes only part of a pointer.
 func (mv *memoryView) store(v value, p pointerValue) bool {
 	if checks && mv.hasExternalLoadOrStore(p) {
 		panic("interp: store to object with external load/store")
@@ -360,6 +360,9 @@ func (mv *memoryView) store(v value, p pointerValue) bool {
 	if p.offset() == 0 && valueLen == obj.buffer.len(mv.r) {
 		obj.buffer = v.clone()
 	} else {
+		if mv.splitsPointer(p, valueLen) {
+			return false
+		}
 		if !writable {
 			obj = obj.clone()
 		}
@@ -372,6 +375,35 @@ func (mv *memoryView) store(v value, p pointerValue) bool {
 	}
 	mv.put(index, obj)
 	return true // success
+}
+
+// splitsPointer returns true if a write of size bytes at p changes only part of
+// a pointer in the object. Interp cannot keep the remaining pointer bytes.
+func (mv *memoryView) splitsPointer(p pointerValue, size uint32) bool {
+	obj := mv.get(p.index())
+	if obj.buffer == nil || size == 0 {
+		return false
+	}
+	buf := obj.buffer.asRawValue(mv.r).buf
+	ptrSize := int(mv.r.pointerSize)
+	for _, i := range [2]int{int(p.offset()), int(p.offset()) + int(size)} {
+		if i <= 0 || i >= len(buf) || buf[i] <= 255 || buf[i-1] != buf[i] {
+			continue
+		}
+		// The cut is in a run of equal pointer words. A run can hold more
+		// than one pointer, so the cut must be at a pointer boundary.
+		start, end := i, i
+		for start > 0 && buf[start-1] == buf[i] {
+			start--
+		}
+		for end < len(buf) && buf[end] == buf[i] {
+			end++
+		}
+		if (i-start)%ptrSize != 0 || (end-start)%ptrSize != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // value is some sort of value, comparable to a LLVM constant. It can be

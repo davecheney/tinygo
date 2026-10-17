@@ -23,6 +23,7 @@ func TestInterp(t *testing.T) {
 		"alloc",
 		"slicedata",
 		"aggregate",
+		"overwrite",
 		"fastrand",
 		"ptrtoint",
 	} {

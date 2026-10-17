@@ -1,0 +1,4 @@
+byte store in pointer: true
+byte store in uintptr: true
+store over two pointers: true
+copy into pointer: true
