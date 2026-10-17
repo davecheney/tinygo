@@ -20,6 +20,7 @@ func TestInterp(t *testing.T) {
 		"interface",
 		"revert",
 		"store",
+		"partialstore",
 		"alloc",
 		"slicedata",
 		"aggregate",

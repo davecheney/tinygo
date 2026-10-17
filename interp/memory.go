@@ -1185,6 +1185,29 @@ func (v rawValue) hasPointer() bool {
 	return false
 }
 
+// hasSplitPointer returns true if this raw value has pointer bytes that are not
+// part of a whole pointer. Interp cannot write these bytes as an LLVM constant.
+func (v rawValue) hasSplitPointer(r *runner) bool {
+	for i := 0; i < len(v.buf); {
+		p := v.buf[i]
+		if p <= 255 {
+			i++
+			continue
+		}
+		end := i + int(r.pointerSize)
+		if end > len(v.buf) {
+			return true
+		}
+		for _, q := range v.buf[i:end] {
+			if q != p {
+				return true
+			}
+		}
+		i = end
+	}
+	return false
+}
+
 // localValue is a special implementation of the value interface. It is a
 // placeholder for other values in instruction operands, and is replaced with
 // one of the others before executing.

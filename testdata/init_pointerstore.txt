@@ -1,0 +1,5 @@
+first byte: true
+struct field: true 5
+array: true 6
+heap object: true 7
+whole pointer: true
