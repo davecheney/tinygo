@@ -413,6 +413,14 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 					}
 					dstBuf := dstObj.buffer.asRawValue(r)
 					srcBuf := srcObj.buffer.asRawValue(r)
+					if (rawValue{srcBuf.buf[src.offset():][:nBytes]}).hasSplitPointer(r) {
+						// Copy part of a pointer at runtime.
+						err := r.runAtRuntime(fn, inst, locals, &mem, indent)
+						if err != nil {
+							return nil, mem, err
+						}
+						continue
+					}
 					copy(dstBuf.buf[dst.offset():][:nBytes], srcBuf.buf[src.offset():][:nBytes])
 					dstObj.buffer = dstBuf
 					mem.put(dst.index(), dstObj)
@@ -596,6 +604,11 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			val := operands[0]
 			if r.debug {
 				fmt.Fprintln(os.Stderr, indent+"store:", val, ptr)
+			}
+			if raw, ok := val.(rawValue); ok && raw.hasSplitPointer(r) {
+				// The bytes are not known as an LLVM constant, so the store
+				// cannot run at runtime alone. Run the function at runtime.
+				return nil, mem, r.errorAt(inst, errUnsupportedInst)
 			}
 			ok := mem.store(val, ptr)
 			if !ok {
