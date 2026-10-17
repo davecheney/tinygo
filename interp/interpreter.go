@@ -398,6 +398,13 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 						continue
 					}
 					srcObj := mem.get(src.index())
+					if srcObj.buffer != nil && srcObj.buffer.asRawValue(r).insidePointer(src.offset(), r.pointerSize) {
+						err := r.runAtRuntime(fn, inst, locals, &mem, indent)
+						if err != nil {
+							return nil, mem, err
+						}
+						continue
+					}
 					dstObj := mem.getWritable(dst.index())
 					if srcObj.buffer == nil || dstObj.buffer == nil {
 						// If the buffer is nil, it means the memory is external.

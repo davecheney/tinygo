@@ -21,6 +21,7 @@ func TestInterp(t *testing.T) {
 		"revert",
 		"store",
 		"alloc",
+		"misaligned",
 		"slicedata",
 		"aggregate",
 		"fastrand",

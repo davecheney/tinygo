@@ -335,6 +335,7 @@ func TestBuild(t *testing.T) {
 		"gc.go",
 		"generics.go",
 		"goroutines.go",
+		"init_misaligned.go",
 		"init.go",
 		"init_multi.go",
 		"interface.go",

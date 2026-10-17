@@ -299,8 +299,9 @@ func (mv *memoryView) put(index uint32, obj object) {
 }
 
 // Load the value behind the given pointer. Returns nil if the pointer points to
-// an external global or if the load is out of bounds of the object (in which
-// case the caller defers the load to runtime).
+// an external global, if the load is out of bounds of the object, or if the
+// load can start inside a pointer (in which case the caller defers the load to
+// runtime).
 func (mv *memoryView) load(p pointerValue, size uint32) value {
 	if checks && mv.hasExternalStore(p) {
 		panic("interp: load from object with external store")
@@ -322,6 +323,9 @@ func (mv *memoryView) load(p pointerValue, size uint32) value {
 		return nil
 	}
 	v := obj.buffer.asRawValue(mv.r)
+	if v.insidePointer(p.offset(), mv.r.pointerSize) {
+		return nil
+	}
 	loadedBuf := v.buf[p.offset() : p.offset()+size]
 	if mv.owned(p.index()) {
 		// A store in an owning view may change the buffer in place, so copy
@@ -1182,6 +1186,22 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 		}
 	}
 	return true
+}
+
+// insidePointer returns true if offset can be after the first byte of a pointer.
+// It also returns true if the run of equal words at offset has a partial pointer.
+func (v rawValue) insidePointer(offset, pointerSize uint32) bool {
+	if offset >= uint32(len(v.buf)) || v.buf[offset] <= 255 {
+		return false
+	}
+	start, end := offset, offset+1
+	for start > 0 && v.buf[start-1] == v.buf[offset] {
+		start--
+	}
+	for end < uint32(len(v.buf)) && v.buf[end] == v.buf[offset] {
+		end++
+	}
+	return (offset-start)%pointerSize != 0 || (end-start)%pointerSize != 0
 }
 
 // hasPointer returns true if this raw value contains a pointer somewhere in the
