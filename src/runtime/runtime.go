@@ -1,9 +1,6 @@
 package runtime
 
-import (
-	"sync/atomic"
-	"unsafe"
-)
+import "unsafe"
 
 //go:generate go run ../../tools/gen-critical-atomics -out ./atomics_critical.go
 
@@ -33,6 +30,8 @@ func GOMAXPROCS(n int) int {
 }
 
 var goroot string // set by the builder
+
+func gorootEnvEnabled() bool
 
 func GOROOT() string {
 	return goroot
@@ -148,48 +147,8 @@ func makeStrongFromWeak(ptr unsafe.Pointer) unsafe.Pointer {
 
 var godebugDefault string // set by the builder
 var godebugStartup string
-var godebugEmpty string
-var godebugEnv atomic.Pointer[string]
-var godebugUpdate atomic.Pointer[func(string, string)]
 
-//go:linkname godebug_setUpdate internal/godebug.setUpdate
-func godebug_setUpdate(update func(string, string)) {
-	// The 'update' function needs to be called whenever the GODEBUG environment
-	// variable changes (for example, via os.Setenv).
-	p := new(func(string, string))
-	*p = update
-	godebugUpdate.Store(p)
-	godebugNotify()
-}
-
-func godebugSetEnv(value string) {
-	p := new(string)
-	*p = value
-	godebugEnv.Store(p)
-	godebugNotify()
-}
-
-func godebugUnsetEnv() {
-	godebugEnv.Store(&godebugEmpty)
-	godebugNotify()
-}
-
-func godebugNotify() {
-	update := godebugUpdate.Load()
-	if update == nil {
-		return
-	}
-	env := godebugStartup
-	if p := godebugEnv.Load(); p != nil {
-		env = *p
-	}
-	(*update)(godebugDefault, env)
-}
-
-//go:linkname godebug_setNewIncNonDefault internal/godebug.setNewIncNonDefault
-func godebug_setNewIncNonDefault(newIncNonDefault func(string) func()) {
-	// Dummy function necessary in Go 1.21.
-}
+func godebugEnvEnabled() bool
 
 // Write to the given file descriptor.
 // This is called from internal/godebug starting with Go 1.21, and only seems to

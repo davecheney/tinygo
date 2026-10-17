@@ -229,6 +229,7 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (BuildRe
 		Nobounds:           config.Options.Nobounds,
 		PanicStrategy:      config.PanicStrategy(),
 		PanicUnwind:        config.PanicUnwind(),
+		ReadOnlyGODEBUG:    slices.Contains(config.BuildTags(), "baremetal"),
 	}
 
 	// Load the target machine, which is the LLVM object that contains all
@@ -249,6 +250,12 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (BuildRe
 	}
 	if _, ok := globalValues["runtime"]["godebugDefault"]; !ok {
 		globalValues["runtime"]["godebugDefault"] = lprogram.MainPkg().DefaultGODEBUG
+	}
+	if slices.Contains(config.BuildTags(), "baremetal") {
+		globalValues["internal/godebug"] = map[string]string{
+			"defaults":    globalValues["runtime"]["godebugDefault"],
+			"environment": startupGODEBUG(globalValues["runtime"]["osEnv"]),
+		}
 	}
 	result := BuildResult{
 		ModuleRoot: lprogram.MainPkg().Module.Dir,
@@ -1441,6 +1448,10 @@ func makeGlobalsModule(ctx llvm.Context, globals map[string]map[string]string, m
 			global := llvm.AddGlobal(mod, stringType, globalName)
 			global.SetInitializer(initializer)
 			global.SetAlignment(targetData.PrefTypeAlignment(stringType))
+			if pkgPath == "internal/godebug" && (name == "defaults" || name == "environment") {
+				global.SetGlobalConstant(true)
+				buf.SetGlobalConstant(true)
+			}
 			// Keep external linkage for module resolution. Hidden visibility permits internalization.
 			// See https://llvm.org/docs/LangRef.html#visibility-styles.
 			global.SetVisibility(llvm.HiddenVisibility)
@@ -1448,6 +1459,15 @@ func makeGlobalsModule(ctx llvm.Context, globals map[string]map[string]string, m
 	}
 
 	return mod
+}
+
+func startupGODEBUG(env string) string {
+	for entry := range strings.SplitSeq(env, "\x00") {
+		if value, ok := strings.CutPrefix(entry, "GODEBUG="); ok {
+			return value
+		}
+	}
+	return ""
 }
 
 // functionStackSizes keeps stack size information about a single function

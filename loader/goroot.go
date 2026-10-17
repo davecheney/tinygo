@@ -23,6 +23,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"sync"
 
@@ -46,6 +47,9 @@ func GetCachedGoroot(config *compileopts.Config) (string, error) {
 
 	// Find the overrides needed for the goroot.
 	overrides := pathsToOverride(config.GoMinorVersion, needsSyscallPackage(config.BuildTags()))
+	if slices.Contains(config.BuildTags(), "baremetal") {
+		overrides["internal/godebug/"] = false
+	}
 
 	// Resolve the merge links within the goroot.
 	merge, err := listGorootMergeLinks(goroot, tinygoroot, overrides)

@@ -62,6 +62,7 @@ type Config struct {
 	Nobounds           bool // Whether to skip bounds checks
 	PanicStrategy      string
 	PanicUnwind        string
+	ReadOnlyGODEBUG    bool // Whether bare-metal GODEBUG reads use immutable startup values.
 }
 
 // compilerContext contains function-independent data that should still be
@@ -2324,6 +2325,8 @@ func (b *builder) createBuiltin(argTypes []types.Type, argValues []llvm.Value, c
 //
 // This is also where compiler intrinsics are implemented.
 func (b *builder) createFunctionCall(instr *ssa.CallCommon) (llvm.Value, error) {
+	b.markRuntimeFeatureUse(instr)
+
 	// See if this is an intrinsic function that is handled specially.
 	if fn := instr.StaticCallee(); fn != nil {
 		// Direct function call, either to a named or anonymous (directly
