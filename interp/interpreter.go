@@ -323,7 +323,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 				newValue := operands[2]
 				compare := strings.HasPrefix(callFn.name, "sync/atomic.CompareAndSwap")
 				if compare {
-					equal, err := r.interpretICmp(old, operands[2], llvm.IntEQ)
+					equal, err := r.interpretICmp(old, operands[2], llvm.IntEQ, inst.llvmInst.Operand(1).Type())
 					if err != nil {
 						return nil, mem, r.errorAt(inst, err)
 					}
@@ -470,7 +470,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 				}
 				locals[inst.localIndex] = makeLiteralInt(result, inst.llvmInst.Type().IntTypeWidth())
 			case strings.HasPrefix(callFn.name, "llvm.smin."), strings.HasPrefix(callFn.name, "llvm.smax."):
-				lhs, rhs, err := intOperands(r, operands[1], operands[2])
+				lhs, rhs, err := intOperands(r, operands[1], operands[2], inst.llvmInst.Type())
 				if err != nil {
 					return nil, mem, r.errorAt(inst, err)
 				}
@@ -892,7 +892,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			predicate := llvm.IntPredicate(operands[2].(literalValue).value.(uint8))
 			lhs := operands[0]
 			rhs := operands[1]
-			result, err := r.interpretICmp(lhs, rhs, predicate)
+			result, err := r.interpretICmp(lhs, rhs, predicate, inst.llvmInst.Operand(0).Type())
 			if err != nil {
 				return nil, mem, r.errorAt(inst, err)
 			}
@@ -990,6 +990,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			if err != nil {
 				return nil, mem, r.errorAt(inst, err)
 			}
+			typ := inst.llvmInst.Type()
 			var result uint64
 			switch inst.opcode {
 			case llvm.Add:
@@ -1001,7 +1002,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			case llvm.UDiv:
 				result = lhsUint / rhsUint
 			case llvm.SDiv:
-				lhsInt, rhsInt, err := intOperands(r, lhs, rhs)
+				lhsInt, rhsInt, err := intOperands(r, lhs, rhs, typ)
 				if err != nil {
 					return nil, mem, r.errorAt(inst, err)
 				}
@@ -1009,7 +1010,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			case llvm.URem:
 				result = lhsUint % rhsUint
 			case llvm.SRem:
-				lhsInt, rhsInt, err := intOperands(r, lhs, rhs)
+				lhsInt, rhsInt, err := intOperands(r, lhs, rhs, typ)
 				if err != nil {
 					return nil, mem, r.errorAt(inst, err)
 				}
@@ -1019,7 +1020,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			case llvm.LShr:
 				result = lhsUint >> rhsUint
 			case llvm.AShr:
-				lhsInt, err := lhs.Int(r)
+				lhsInt, err := signedInt(r, lhs, typ)
 				if err != nil {
 					return nil, mem, r.errorAt(inst, err)
 				}
@@ -1033,7 +1034,11 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			default:
 				panic("unreachable")
 			}
-			locals[inst.localIndex] = makeLiteralInt(result, int(lhs.len(r)*8))
+			bits := int(lhs.len(r) * 8)
+			if isBool(typ) {
+				bits = 1
+			}
+			locals[inst.localIndex] = makeLiteralInt(result, bits)
 			if r.debug {
 				fmt.Fprintln(os.Stderr, indent+instructionNameMap[inst.opcode]+":", lhs, rhs, "->", result)
 			}
@@ -1047,7 +1052,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			// and then truncating it as necessary.
 			var value uint64
 			if inst.opcode == llvm.SExt {
-				n, err := operands[0].Int(r)
+				n, err := signedInt(r, operands[0], inst.llvmInst.Operand(0).Type())
 				if err != nil {
 					return nil, mem, r.errorAt(inst, err)
 				}
@@ -1068,7 +1073,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			var value float64
 			switch inst.opcode {
 			case llvm.SIToFP:
-				n, err := operands[0].Int(r)
+				n, err := signedInt(r, operands[0], inst.llvmInst.Operand(0).Type())
 				if err != nil {
 					return nil, mem, r.errorAt(inst, err)
 				}
@@ -1104,7 +1109,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 
 // Interpret an icmp instruction. Doesn't have side effects, only returns the
 // output of the comparison.
-func (r *runner) interpretICmp(lhs, rhs value, predicate llvm.IntPredicate) (bool, error) {
+func (r *runner) interpretICmp(lhs, rhs value, predicate llvm.IntPredicate, typ llvm.Type) (bool, error) {
 	switch predicate {
 	case llvm.IntEQ, llvm.IntNE:
 		var result bool
@@ -1141,7 +1146,7 @@ func (r *runner) interpretICmp(lhs, rhs value, predicate llvm.IntPredicate) (boo
 			return lhs <= rhs, nil
 		}
 	case llvm.IntSGT, llvm.IntSGE, llvm.IntSLT, llvm.IntSLE:
-		lhs, rhs, err := intOperands(r, lhs, rhs)
+		lhs, rhs, err := intOperands(r, lhs, rhs, typ)
 		if err != nil {
 			return false, err
 		}
@@ -1170,13 +1175,27 @@ func uintOperands(r *runner, lhs, rhs value) (uint64, uint64, error) {
 	return lhsUint, rhsUint, err
 }
 
-func intOperands(r *runner, lhs, rhs value) (int64, int64, error) {
-	lhsInt, err := lhs.Int(r)
+func intOperands(r *runner, lhs, rhs value, typ llvm.Type) (int64, int64, error) {
+	lhsInt, err := signedInt(r, lhs, typ)
 	if err != nil {
 		return 0, 0, err
 	}
-	rhsInt, err := rhs.Int(r)
+	rhsInt, err := signedInt(r, rhs, typ)
 	return lhsInt, rhsInt, err
+}
+
+// Read an integer as a signed value. An i1 true is -1, see the LangRef
+// section "Integer Type".
+func signedInt(r *runner, v value, typ llvm.Type) (int64, error) {
+	if isBool(typ) {
+		n, err := v.Uint(r)
+		return -int64(n & 1), err
+	}
+	return v.Int(r)
+}
+
+func isBool(typ llvm.Type) bool {
+	return typ.TypeKind() == llvm.IntegerTypeKind && typ.IntTypeWidth() == 1
 }
 
 func (r *runner) runAtRuntime(fn *function, inst instruction, locals []value, mem *memoryView, indent string) *Error {

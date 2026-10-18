@@ -419,6 +419,8 @@ func makeLiteralInt(value uint64, bits int) literalValue {
 		return literalValue{uint16(value)}
 	case 8:
 		return literalValue{uint8(value)}
+	case 1:
+		return literalValue{uint8(value & 1)}
 	default:
 		panic("unknown integer size")
 	}
@@ -1112,7 +1114,7 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 			if !lhs.set(llvmValue.Operand(0), r) || !rhs.set(llvmValue.Operand(1), r) {
 				return false
 			}
-			result, err := r.interpretICmp(lhs, rhs, llvmValue.IntPredicate())
+			result, err := r.interpretICmp(lhs, rhs, llvmValue.IntPredicate(), llvmValue.Operand(0).Type())
 			if err != nil {
 				return false
 			}
