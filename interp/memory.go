@@ -1049,6 +1049,9 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 				// Widths like i1 don't fill their bytes, so leave them for runtime.
 				return false
 			}
+			if src.len(r) != size {
+				src = makeLiteralInt(src.Uint(r), int(size)*8).asRawValue(r)
+			}
 			copy(v.buf[:size], src.buf)
 		case llvm.GetElementPtr:
 			ptr := llvmValue.Operand(0)
