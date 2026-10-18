@@ -1065,30 +1065,37 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			}
 			locals[inst.localIndex] = makeLiteralInt(value, int(bitwidth))
 		case llvm.SIToFP, llvm.UIToFP:
-			var value float64
-			switch inst.opcode {
-			case llvm.SIToFP:
-				n, err := operands[0].Int(r)
-				if err != nil {
-					return nil, mem, r.errorAt(inst, err)
-				}
-				value = float64(n)
-			case llvm.UIToFP:
-				n, err := operands[0].Uint(r)
-				if err != nil {
-					return nil, mem, r.errorAt(inst, err)
-				}
-				value = float64(n)
+			var sn int64
+			var un uint64
+			var err error
+			signed := inst.opcode == llvm.SIToFP
+			if signed {
+				sn, err = operands[0].Int(r)
+			} else {
+				un, err = operands[0].Uint(r)
+			}
+			if err != nil {
+				return nil, mem, r.errorAt(inst, err)
 			}
 			bitwidth := operands[1].(literalValue).value.(uint64)
 			if r.debug {
-				fmt.Fprintln(os.Stderr, indent+instructionNameMap[inst.opcode]+":", value, bitwidth)
+				fmt.Fprintln(os.Stderr, indent+instructionNameMap[inst.opcode]+":", operands[0], bitwidth)
 			}
+			// Convert directly to the destination type so the value is rounded once.
+			// https://llvm.org/docs/LangRef.html#sitofp-to-instruction
 			switch bitwidth {
 			case 64:
+				value := float64(un)
+				if signed {
+					value = float64(sn)
+				}
 				locals[inst.localIndex] = literalValue{math.Float64bits(value)}
 			case 32:
-				locals[inst.localIndex] = literalValue{math.Float32bits(float32(value))}
+				value := float32(un)
+				if signed {
+					value = float32(sn)
+				}
+				locals[inst.localIndex] = literalValue{math.Float32bits(value)}
 			default:
 				panic("unknown integer size in sitofp/uitofp")
 			}
