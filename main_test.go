@@ -41,8 +41,6 @@ const TESTDATA = "testdata"
 
 var testTarget = flag.String("target", "", "override test target")
 
-var testOnlyCurrentOS = flag.Bool("only-current-os", false, "")
-
 var supportedLinuxArches = map[string]string{
 	"AMD64Linux": "linux/amd64",
 	"X86Linux":   "linux/386",
@@ -544,7 +542,9 @@ func TestBuild(t *testing.T) {
 		return
 	}
 
-	if !*testOnlyCurrentOS {
+	// Any nonempty TINYGO_TEST_SKIP_EMULATED_BUILDS skips only these build groups.
+	// See .github/workflows/build-macos.yml and .github/workflows/windows.yml.
+	if os.Getenv("TINYGO_TEST_SKIP_EMULATED_BUILDS") == "" {
 		t.Run("EmulatedCortexM3", func(t *testing.T) {
 			t.Parallel()
 			runPlatTests(optionsFromTarget("cortex-m-qemu", sema), tests, t)

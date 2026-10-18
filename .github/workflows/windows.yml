@@ -99,7 +99,9 @@ jobs:
         run: make -j3 gen-device
       - name: Test TinyGo
         shell: bash
-        run: make test GOTESTFLAGS="-only-current-os"
+        env:
+          TINYGO_TEST_SKIP_EMULATED_BUILDS: '1'
+        run: make test
       - name: Build TinyGo release tarball
         shell: bash
         run: make build/release -j4

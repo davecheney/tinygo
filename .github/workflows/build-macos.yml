@@ -89,7 +89,9 @@ jobs:
       - name: make gen-device
         run: make -j3 gen-device
       - name: Test TinyGo
-        run: make test GOTESTFLAGS="-only-current-os"
+        env:
+          TINYGO_TEST_SKIP_EMULATED_BUILDS: '1'
+        run: make test
 
   stdlib-test-macos:
     # Test the standard library, compiled and run on the host itself.
