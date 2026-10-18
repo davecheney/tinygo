@@ -521,7 +521,8 @@ func (v literalValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Val
 	case llvm.DoubleTypeKind:
 		return llvm.ConstFloat(llvmType, math.Float64frombits(v.value.(uint64))), nil
 	case llvm.FloatTypeKind:
-		return llvm.ConstFloat(llvmType, float64(math.Float32frombits(v.value.(uint32)))), nil
+		bits := llvm.ConstInt(llvmType.Context().Int32Type(), uint64(v.value.(uint32)), false)
+		return llvm.ConstBitCast(bits, llvmType), nil
 	default:
 		return v.asRawValue(mem.r).toLLVMValue(llvmType, mem)
 	}
@@ -1006,9 +1007,9 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 		f := math.Float64frombits(b)
 		return llvm.ConstFloat(llvmType, f), nil
 	case llvm.FloatTypeKind:
-		b := uint32(rawValue{v.buf[:4]}.Uint(mem.r))
-		f := math.Float32frombits(b)
-		return llvm.ConstFloat(llvmType, float64(f)), nil
+		// Use the bit pattern because a conversion through float64 quiets a signaling NaN.
+		b := rawValue{v.buf[:4]}.Uint(mem.r)
+		return llvm.ConstBitCast(llvm.ConstInt(llvmType.Context().Int32Type(), b, false), llvmType), nil
 	default:
 		return llvm.Value{}, errors.New("interp: todo: raw value to LLVM value: " + llvmType.String())
 	}
@@ -1169,9 +1170,9 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 				v.buf[i] = uint64(b)
 			}
 		case llvm.FloatTypeKind:
-			f, _ := llvmValue.DoubleValue()
+			bits := llvm.ConstBitCast(llvmValue, llvmValue.Type().Context().Int32Type()).ZExtValue()
 			var buf [4]byte
-			r.byteOrder.PutUint32(buf[:], math.Float32bits(float32(f)))
+			r.byteOrder.PutUint32(buf[:], uint32(bits))
 			for i, b := range buf {
 				v.buf[i] = uint64(b)
 			}
