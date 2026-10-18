@@ -41,6 +41,12 @@ int doCallback(int a, int b, binop_t callback) {
 	return callback(a, b);
 }
 
+void setCallbackValue(void);
+
+void callSetCallbackValue(void) {
+	setCallbackValue();
+}
+
 int variadic0() {
 	return 1;
 }

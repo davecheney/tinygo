@@ -39,6 +39,8 @@ type runner struct {
 	interpErr         error  // set by Uint/Int when they encounter pointer data
 	xorshift32State   uint32 // state for runtime.fastrand
 	xorshift64State   uint64 // state for runtime.fastrand64
+	exported          []llvm.Value
+	exportedDone      bool
 }
 
 func newRunner(mod llvm.Module, timeout time.Duration, maxLoopIterations int, debug bool) *runner {
@@ -342,4 +344,47 @@ func xorshiftMult64(x uint64) uint64 {
 	x ^= x << 25
 	x ^= x >> 27
 	return x * 2685821657736338717
+}
+
+// exportedFunctions returns the defined functions that outside code can call.
+// Entry points that run runtime.initAll are left out, as init cannot call them.
+func (r *runner) exportedFunctions() []llvm.Value {
+	if r.exportedDone {
+		return r.exported
+	}
+	r.exportedDone = true
+	entryPoints := make(map[llvm.Value]struct{})
+	if initAll := r.mod.NamedFunction("runtime.initAll"); !initAll.IsNil() {
+		entryPoints[initAll] = struct{}{}
+		worklist := []llvm.Value{initAll}
+		for len(worklist) > 0 {
+			value := worklist[len(worklist)-1]
+			worklist = worklist[:len(worklist)-1]
+			for use := value.FirstUse(); !use.IsNil(); use = use.NextUse() {
+				user := use.User()
+				if !user.IsAInstruction().IsNil() {
+					user = user.InstructionParent().Parent()
+				} else if user.IsAConstantExpr().IsNil() {
+					continue
+				}
+				if _, ok := entryPoints[user]; !ok {
+					entryPoints[user] = struct{}{}
+					worklist = append(worklist, user)
+				}
+			}
+		}
+	}
+	for fn := r.mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
+		if fn.IsDeclaration() || fn.Visibility() != llvm.DefaultVisibility {
+			continue
+		}
+		if _, ok := entryPoints[fn]; ok {
+			continue
+		}
+		switch fn.Linkage() {
+		case llvm.ExternalLinkage, llvm.ExternalWeakLinkage, llvm.WeakAnyLinkage, llvm.WeakODRLinkage:
+			r.exported = append(r.exported, fn)
+		}
+	}
+	return r.exported
 }
