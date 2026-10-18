@@ -58,6 +58,7 @@ func main() {
 	cb = C.binop_t(C.mul)
 	println("callback 2:", C.doCallback(20, 30, cb))
 	genericCallbackCall[int]()
+	println("callback in init:", callbackInit, callbackValue)
 
 	// variadic functions
 	println("variadic0:", C.variadic0())
@@ -250,6 +251,21 @@ func printUnion(union C.joined_t) C.joined_t {
 func mul(a, b C.int) C.int {
 	return a * b
 }
+
+var callbackValue int
+
+//export setCallbackValue
+func setCallbackValue() {
+	callbackValue = 5
+}
+
+// The C call changes callbackValue, so the rest must run after it.
+var callbackInit = func() int {
+	C.callSetCallbackValue()
+	v := callbackValue
+	callbackValue++
+	return v
+}()
 
 func printBitfield(bitfield *C.bitfield_t) {
 	println("bitfield a:", bitfield.bitfield_a())

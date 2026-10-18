@@ -1211,6 +1211,15 @@ func (r *runner) runAtRuntime(fn *function, inst instruction, locals []value, me
 				return r.errorAt(inst, err)
 			}
 		}
+		if !llvmFn.IsAFunction().IsNil() && llvmFn.IsDeclaration() && !strings.HasPrefix(llvmFn.Name(), "llvm.") {
+			// External code can call back into any exported function.
+			for _, exported := range r.exportedFunctions() {
+				err := mem.markExternalStore(exported)
+				if err != nil {
+					return r.errorAt(inst, err)
+				}
+			}
+		}
 		result = r.builder.CreateCall(inst.llvmInst.CalledFunctionType(), llvmFn, args, inst.name)
 	case llvm.Load:
 		err := mem.markExternalLoad(operands[0])
