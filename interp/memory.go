@@ -1076,7 +1076,18 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 				}
 			}
 			ptrSize := r.pointerSize
-			ptrValue, err := r.getValue(ptr).asPointer(r)
+			base := r.getValue(ptr)
+			ptrValue, err := base.asPointer(r)
+			if err == errIntegerAsPointer {
+				// GEP on a fixed address, for example memory-mapped I/O.
+				raw := base.asRawValue(r)
+				if raw.hasPointer() {
+					return false
+				}
+				addr := makeLiteralInt(raw.Uint(r)+totalOffset, int(ptrSize)*8)
+				copy(v.buf[:ptrSize], addr.asRawValue(r).buf)
+				break
+			}
 			if err != nil {
 				panic(err)
 			}
