@@ -1,6 +1,6 @@
 const fs = require('fs')
 
-require('../targets/wasm_exec.js');
+require('../../targets/wasm_exec.js');
 
 var callback;
 

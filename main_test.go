@@ -316,68 +316,7 @@ func TestTrimPathTestPackages(t *testing.T) {
 func TestBuild(t *testing.T) {
 	t.Parallel()
 
-	tests := []string{
-		"alias.go",
-		"atomic.go",
-		"binop.go",
-		"buildinfo.go",
-		"calls.go",
-		"cgo/",
-		"channel.go",
-		"coreassign.go",
-		"embed/",
-		"finalizer.go",
-		"finalizerbits.go",
-		"finalizeridle.go",
-		"finalizerinvariants.go",
-		"finalizerlarge.go",
-		"float.go",
-		"gc.go",
-		"generics.go",
-		"goroutines.go",
-		"init.go",
-		"init_multi.go",
-		"interface-blank.go",
-		"interface.go",
-		"json.go",
-		"localtypes/",
-		"localtypes.go",
-		"map.go",
-		"map_bigkey.go",
-		"math.go",
-		"oldgo/",
-		"print.go",
-		"reflect.go",
-		"signal.go",
-		"signalnotify.go",
-		"slice.go",
-		"sort.go",
-		"stdlib.go",
-		"string.go",
-		"structs.go",
-		"testing.go",
-		"timers.go",
-		"zeroalloc.go",
-	}
-
-	// Go 1.21 made some changes to the language, which we can only test when
-	// we're actually on Go 1.21.
-	_, minor, err := goenv.GetGorootVersion()
-	if err != nil {
-		t.Fatal("could not get version:", minor)
-	}
-	if minor >= 21 {
-		tests = append(tests, "go1.21.go")
-	}
-	if minor >= 22 {
-		tests = append(tests, "go1.22/")
-	}
-	if minor >= 23 {
-		tests = append(tests, "go1.23/")
-	}
-	if minor >= 24 {
-		tests = append(tests, "typealias.go")
-	}
+	tests := buildTests(t)
 
 	if *testTarget != "" {
 		// This makes it possible to run one specific test (instead of all),
@@ -387,7 +326,7 @@ func TestBuild(t *testing.T) {
 		runPlatTests(options, tests, t)
 		if *testTarget == "wasip1" {
 			t.Run("cgo-realloc", func(t *testing.T) {
-				runTest("cgo-realloc/", options, t, nil, nil)
+				runTest("special/cgo-realloc/", options, t, nil, nil)
 			})
 		}
 		return
@@ -399,7 +338,7 @@ func TestBuild(t *testing.T) {
 		runPlatTests(hostOptions, tests, t)
 		t.Run("testing.go-verbose", func(t *testing.T) {
 			t.Parallel()
-			runTest("testing-verbose.go", hostOptions, t, nil, nil)
+			runTest("special/testing-verbose.go", hostOptions, t, nil, nil)
 		})
 
 		// scheduler.threads needs threadID, which exists only on Linux and Darwin.
@@ -445,7 +384,7 @@ func TestBuild(t *testing.T) {
 			opts := optionsFromTarget("", sema)
 			opts.Opt = "0"
 			opts.GC = "boehm"
-			runTestWithConfig("gc-boehm-opt0.go", t, opts, nil, nil)
+			runTestWithConfig("special/gc-boehm-opt0.go", t, opts, nil, nil)
 		})
 
 		// Regression test: at -opt=0 the compiler does not always remove a
@@ -522,7 +461,7 @@ func TestBuild(t *testing.T) {
 					"someGlobal": "foobar",
 				},
 			}
-			runTestWithConfig("ldflags.go", t, opts, nil, nil)
+			runTestWithConfig("special/ldflags.go", t, opts, nil, nil)
 		})
 
 		// Same as ldflags, but the global has a default value in source.
@@ -535,7 +474,7 @@ func TestBuild(t *testing.T) {
 					"someGlobal": "foobar",
 				},
 			}
-			runTestWithConfig("ldflags-initialized.go", t, opts, nil, nil)
+			runTestWithConfig("special/ldflags-initialized.go", t, opts, nil, nil)
 		})
 	})
 
@@ -572,7 +511,7 @@ func TestBuild(t *testing.T) {
 				optionsBoehm := optionsFromTarget("wasm", sema)
 				optionsBoehm.GC = "boehm"
 				runTest("gc.go", optionsBoehm, t, nil, nil)
-				runTest("gc-boehm.go", optionsBoehm, t, nil, nil)
+				runTest("special/gc-boehm.go", optionsBoehm, t, nil, nil)
 			})
 		})
 		t.Run("WASIp1", func(t *testing.T) {
@@ -581,7 +520,7 @@ func TestBuild(t *testing.T) {
 			runPlatTests(options, tests, t)
 			runGCLivenessTest(options, t)
 			t.Run("cgo-realloc", func(t *testing.T) {
-				runTest("cgo-realloc/", options, t, nil, nil)
+				runTest("special/cgo-realloc/", options, t, nil, nil)
 			})
 
 			// Test with -gc=boehm.
@@ -590,7 +529,7 @@ func TestBuild(t *testing.T) {
 				optionsBoehm := optionsFromTarget("wasip1", sema)
 				optionsBoehm.GC = "boehm"
 				runTest("gc.go", optionsBoehm, t, nil, nil)
-				runTest("gc-boehm.go", optionsBoehm, t, nil, nil)
+				runTest("special/gc-boehm.go", optionsBoehm, t, nil, nil)
 			})
 		})
 		t.Run("WASIp2", func(t *testing.T) {
@@ -629,6 +568,41 @@ func TestBuild(t *testing.T) {
 	}
 }
 
+// buildTests returns the sorted list of programs in testdata for TestBuild.
+// A program is <name>.go with <name>.txt, or a directory <name>/ with out.txt.
+// Other tests run the programs in testdata/special with special options.
+func buildTests(t *testing.T) []string {
+	t.Helper()
+	var tests []string
+	outputs, err := filepath.Glob(TESTDATA + "/*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, output := range outputs {
+		name := strings.TrimSuffix(filepath.Base(output), ".txt") + ".go"
+		_, err := os.Stat(filepath.Join(TESTDATA, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		tests = append(tests, name)
+	}
+	outputs, err = filepath.Glob(TESTDATA + "/*/out.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, output := range outputs {
+		tests = append(tests, filepath.Base(filepath.Dir(output))+"/")
+	}
+	if len(tests) == 0 {
+		t.Fatal("no test programs found in testdata")
+	}
+	slices.Sort(tests)
+	return tests
+}
+
 // TestTimerStopResetRace checks that stopping or resetting a timer while its
 // callback is running behaves correctly. It reaches into the runtime timer
 // hooks via //go:linkname and relies on the threads scheduler, which is only
@@ -641,7 +615,7 @@ func TestTimerStopResetRace(t *testing.T) {
 	default:
 		t.Skipf("host GOOS %s does not use the threads scheduler", runtime.GOOS)
 	}
-	runTest("timer_stop_reset_race.go", optionsFromTarget("", sema), t, nil, nil)
+	runTest("special/timer_stop_reset_race.go", optionsFromTarget("", sema), t, nil, nil)
 }
 
 func TestESP32QEMU(t *testing.T) {
@@ -815,7 +789,7 @@ func runPlatTests(options compileopts.Options, tests []string, t *testing.T) {
 	if !strings.HasPrefix(spec.Emulator, "simavr ") {
 		t.Run("env.go", func(t *testing.T) {
 			t.Parallel()
-			runTest("env.go", options, t, []string{"first", "second"}, []string{"ENV1=VALUE1", "ENV2=VALUE2"})
+			runTest("special/env.go", options, t, []string{"first", "second"}, []string{"ENV1=VALUE1", "ENV2=VALUE2"})
 		})
 	}
 	if isWebAssembly {
@@ -829,26 +803,22 @@ func runPlatTests(options compileopts.Options, tests []string, t *testing.T) {
 	if options.Target == "" || isWASI {
 		t.Run("filesystem.go", func(t *testing.T) {
 			t.Parallel()
-			runTest("filesystem.go", options, t, nil, nil)
+			runTest("special/filesystem.go", options, t, nil, nil)
 		})
 	}
 	if options.Target == "" || options.Target == "wasm" || isWASI {
 		t.Run("rand.go", func(t *testing.T) {
 			t.Parallel()
-			runTest("rand.go", options, t, nil, nil)
+			runTest("special/rand.go", options, t, nil, nil)
 		})
 	}
-	t.Run("recover.go", func(t *testing.T) {
-		t.Parallel()
-		runTest("recover.go", options, t, nil, nil)
-	})
 	if isWebAssembly {
 		t.Run("recover-explicit.go", func(t *testing.T) {
 			t.Parallel()
 			options := compileopts.Options(options)
 			options.Scheduler = "none"
 			options.PanicUnwind = "explicit"
-			runTest("recover-explicit.go", options, t, nil, nil)
+			runTest("special/recover-explicit.go", options, t, nil, nil)
 		})
 	}
 }
@@ -916,13 +886,13 @@ func optionsFromOSARCH(osarch string, sema chan struct{}) compileopts.Options {
 	return options
 }
 
-// runGCLivenessTest runs testdata/gc-liveness-repro.go. Only targets with
-// stack objects can lose a GC root the way it reproduces, so it is registered
-// per wasm target instead of being part of the shared test list.
+// runGCLivenessTest runs testdata/special/gc-liveness-repro.go. Only targets
+// with stack objects can lose a GC root the way it reproduces, so it is
+// registered per wasm target instead of being part of the shared test list.
 func runGCLivenessTest(options compileopts.Options, t *testing.T) {
 	t.Run("gc-liveness-repro.go", func(t *testing.T) {
 		t.Parallel()
-		runTest("gc-liveness-repro.go", options, t, nil, nil)
+		runTest("special/gc-liveness-repro.go", options, t, nil, nil)
 	})
 }
 
@@ -988,7 +958,7 @@ func runTestWithConfig(name string, t *testing.T, options compileopts.Options, c
 	if config.EmulatorName() == "qemu-system-xtensa" {
 		actual = cleanESP32QEMUOutput(actual)
 	}
-	if name == "testing.go" || name == "testing-verbose.go" {
+	if name == "testing.go" || name == "special/testing-verbose.go" {
 		// Strip actual time.
 		re := regexp.MustCompile(`\([0-9]\.[0-9][0-9]s\)`)
 		actual = re.ReplaceAllLiteral(actual, []byte{'(', '0', '.', '0', '0', 's', ')'})
@@ -1199,7 +1169,7 @@ func TestWasmExport(t *testing.T) {
 			if tc.file != "" {
 				filename = tc.file
 			}
-			result, err := builder.Build("testdata/"+filename, ".wasm", tmpdir, buildConfig)
+			result, err := builder.Build("testdata/special/"+filename, ".wasm", tmpdir, buildConfig)
 			if err != nil {
 				t.Fatal("failed to build binary:", err)
 			}
@@ -1306,7 +1276,7 @@ func TestWasmExport(t *testing.T) {
 			// Check that the output matches the expected output.
 			// (Skip this for wasm-unknown because it can't produce output).
 			if !tc.noOutput {
-				checkOutput(t, "testdata/wasmexport.txt", output.Bytes())
+				checkOutput(t, "testdata/special/wasmexport.txt", output.Bytes())
 			}
 		})
 	}
@@ -1322,21 +1292,21 @@ func TestWasmFuncOf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := builder.Build("testdata/wasmfunc.go", ".wasm", tmpdir, buildConfig)
+	result, err := builder.Build("testdata/special/wasmfunc.go", ".wasm", tmpdir, buildConfig)
 	if err != nil {
 		t.Fatal("failed to build binary:", err)
 	}
 
 	// Test the resulting binary using NodeJS.
 	output := &bytes.Buffer{}
-	cmd := exec.Command("node", "testdata/wasmfunc.js", result.Binary, buildConfig.BuildMode())
+	cmd := exec.Command("node", "testdata/special/wasmfunc.js", result.Binary, buildConfig.BuildMode())
 	cmd.Stdout = output
 	cmd.Stderr = output
 	err = cmd.Run()
 	if err != nil {
 		t.Error("failed to run node:", err)
 	}
-	checkOutput(t, "testdata/wasmfunc.txt", output.Bytes())
+	checkOutput(t, "testdata/special/wasmfunc.txt", output.Bytes())
 }
 
 // Test //go:wasmexport in JavaScript (using NodeJS).
@@ -1362,21 +1332,21 @@ func TestWasmExportJS(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := builder.Build("testdata/wasmexport-noscheduler.go", ".wasm", tmpdir, buildConfig)
+			result, err := builder.Build("testdata/special/wasmexport-noscheduler.go", ".wasm", tmpdir, buildConfig)
 			if err != nil {
 				t.Fatal("failed to build binary:", err)
 			}
 
 			// Test the resulting binary using NodeJS.
 			output := &bytes.Buffer{}
-			cmd := exec.Command("node", "testdata/wasmexport.js", result.Binary, buildConfig.BuildMode())
+			cmd := exec.Command("node", "testdata/special/wasmexport.js", result.Binary, buildConfig.BuildMode())
 			cmd.Stdout = output
 			cmd.Stderr = output
 			err = cmd.Run()
 			if err != nil {
 				t.Error("failed to run node:", err)
 			}
-			checkOutput(t, "testdata/wasmexport.txt", output.Bytes())
+			checkOutput(t, "testdata/special/wasmexport.txt", output.Bytes())
 		})
 	}
 }
@@ -1627,14 +1597,14 @@ func TestStdin(t *testing.T) {
 	}
 
 	output := &bytes.Buffer{}
-	_, err = buildAndRun(TESTDATA+"/stdin.go", config, output, nil, nil, time.Minute, func(cmd *exec.Cmd, result builder.BuildResult) error {
+	_, err = buildAndRun(TESTDATA+"/special/stdin.go", config, output, nil, nil, time.Minute, func(cmd *exec.Cmd, result builder.BuildResult) error {
 		cmd.Stdin = strings.NewReader("hello\nworld\n")
 		return cmd.Run()
 	})
 	if err != nil {
 		t.Error("failed to run:", err)
 	}
-	checkOutput(t, TESTDATA+"/stdin.txt", output.Bytes())
+	checkOutput(t, TESTDATA+"/special/stdin.txt", output.Bytes())
 }
 
 func TestTest(t *testing.T) {
