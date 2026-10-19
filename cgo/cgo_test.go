@@ -12,6 +12,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
@@ -53,7 +54,7 @@ func TestCGo(t *testing.T) {
 			}
 
 			// Process the AST with CGo.
-			cgoFiles, _, _, _, _, cgoErrors := Process([]*ast.File{f}, "testdata", "main", fset, cflags, "linux")
+			cgoFiles, _, _, _, _, cgoErrors := Process([]*ast.File{f}, "testdata", "main", fset, cflags, "linux", "arm", nil)
 
 			// Check the AST for type errors.
 			var typecheckErrors []error
@@ -117,6 +118,43 @@ func TestCGo(t *testing.T) {
 				t.Errorf("output did not match:\n%s", string(actual))
 			}
 		})
+	}
+}
+
+func TestCGoBuildConstraints(t *testing.T) {
+	p := &cgoPackage{
+		goos:       "darwin",
+		goarch:     "arm64",
+		buildTags:  []string{"llvm22"},
+		packageDir: "testdata",
+		fset:       token.NewFileSet(),
+	}
+	text := `#cgo CFLAGS: -DUNCONDITIONAL
+#cgo darwin,arm64 CFLAGS: -DTARGET
+#cgo darwin,!amd64 CFLAGS: -DNEGATED
+#cgo unix CFLAGS: -DUNIX
+#cgo cgo CFLAGS: -DCGO
+#cgo gc CFLAGS: -DGC
+#cgo linux,amd64 darwin,arm64 LDFLAGS: -lconditional
+#cgo llvm22 CFLAGS: -DLLVM22
+#cgo !llvm23 CFLAGS: -DNOTLLVM23
+#cgo llvm23 CFLAGS: -DWRONGTAG
+#cgo (darwin&&arm64)&&llvm22 CFLAGS: -DMODERN
+#cgo darwin,amd64 CFLAGS: -DWRONGARCH
+#cgo linux CFLAGS: -DWRONGOS`
+
+	p.parseCGoPreprocessorLines(text, token.NoPos)
+	if len(p.errors) != 0 {
+		t.Fatalf("unexpected #cgo errors: %v", p.errors)
+	}
+
+	wantCFlags := []string{"-DUNCONDITIONAL", "-DTARGET", "-DNEGATED", "-DUNIX", "-DCGO", "-DGC", "-DLLVM22", "-DNOTLLVM23", "-DMODERN"}
+	if !reflect.DeepEqual(p.cflags, wantCFlags) {
+		t.Errorf("CFLAGS = %v, want %v", p.cflags, wantCFlags)
+	}
+	wantLDFlags := []string{"-lconditional"}
+	if !reflect.DeepEqual(p.ldflags, wantLDFlags) {
+		t.Errorf("LDFLAGS = %v, want %v", p.ldflags, wantLDFlags)
 	}
 }
 
