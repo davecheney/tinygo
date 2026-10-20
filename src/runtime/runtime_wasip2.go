@@ -12,6 +12,7 @@ import (
 	"internal/cm"
 )
 
+//go:noruntime
 func init() {
 	if gorootEnvEnabled() {
 		if value := startupEnv("GOROOT"); value != "" {

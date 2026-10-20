@@ -710,6 +710,24 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, frames
 					})
 					return nil, mem, callErr
 				}
+				if callFn.noRuntimeInitializer {
+					deferred := false
+					for _, emitted := range callMem.instructions {
+						if !emitted.IsAInstruction().IsNil() {
+							deferred = true
+							break
+						}
+					}
+					if deferred {
+						// Keep a marked initializer intact until all its work
+						// can be evaluated, including its nested calls.
+						callMem.revert()
+						if err := r.runAtRuntime(fn, inst, locals, &mem, depth); err != nil {
+							return nil, mem, err
+						}
+						continue
+					}
+				}
 				locals[inst.localIndex] = retval
 				mem.extend(callMem)
 			}

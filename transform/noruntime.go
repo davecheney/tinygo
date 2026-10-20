@@ -7,7 +7,7 @@ import (
 	"tinygo.org/x/go-llvm"
 )
 
-// CheckNoRuntime rejects marked functions that survive dead-code removal.
+// CheckNoRuntime rejects marked functions and initializers left after dead-code removal.
 // Call after interp and before any inlining (builder.optimizeProgram).
 func CheckNoRuntime(mod llvm.Module) []error {
 	hasMarked := false
@@ -58,6 +58,10 @@ func CheckNoRuntime(mod llvm.Module) []error {
 	var errs []error
 	for fn := mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
 		if !isNoRuntime(fn) {
+			continue
+		}
+		if name := fn.GetStringAttributeAtIndex(-1, "tinygo-noruntime").GetStringValue(); name != "" {
+			errs = append(errs, errorAt(fn, "//go:noruntime initializer for "+name+" remains reachable at runtime"))
 			continue
 		}
 		errs = append(errs, errorAt(fn, "//go:noruntime function "+fn.Name()+" remains reachable at runtime"))
