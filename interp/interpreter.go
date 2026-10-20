@@ -864,10 +864,6 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			if err != nil {
 				return nil, mem, r.errorAt(inst, err)
 			}
-			lhsInt, rhsInt, err := intOperands(r, lhs, rhs)
-			if err != nil {
-				return nil, mem, r.errorAt(inst, err)
-			}
 			var result uint64
 			switch inst.opcode {
 			case llvm.Add:
@@ -879,16 +875,28 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			case llvm.UDiv:
 				result = lhsUint / rhsUint
 			case llvm.SDiv:
+				lhsInt, rhsInt, err := intOperands(r, lhs, rhs)
+				if err != nil {
+					return nil, mem, r.errorAt(inst, err)
+				}
 				result = uint64(lhsInt / rhsInt)
 			case llvm.URem:
 				result = lhsUint % rhsUint
 			case llvm.SRem:
+				lhsInt, rhsInt, err := intOperands(r, lhs, rhs)
+				if err != nil {
+					return nil, mem, r.errorAt(inst, err)
+				}
 				result = uint64(lhsInt % rhsInt)
 			case llvm.Shl:
 				result = lhsUint << rhsUint
 			case llvm.LShr:
 				result = lhsUint >> rhsUint
 			case llvm.AShr:
+				lhsInt, err := lhs.Int(r)
+				if err != nil {
+					return nil, mem, r.errorAt(inst, err)
+				}
 				result = uint64(lhsInt >> rhsUint)
 			case llvm.And:
 				result = lhsUint & rhsUint

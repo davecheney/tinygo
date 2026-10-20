@@ -1341,7 +1341,7 @@ func (r *runner) readObjectLayout(layoutValue value) (uint64, *big.Int) {
 		// It's an integer, which means it's a small object.
 		layout, err := layoutValue.Uint(r)
 		if err != nil {
-			panic(err)
+			panic("interp: GC layout contains pointer data")
 		}
 		if layout == 0 {
 			panic("runtime.alloc called without a GC layout")
@@ -1378,7 +1378,7 @@ func (r *runner) readObjectLayout(layoutValue value) (uint64, *big.Int) {
 	buf := r.objects[ptr.index()].buffer.(rawValue)
 	objectSizeWords, err := rawValue{buf: buf.buf[:r.pointerSize]}.Uint(r)
 	if err != nil {
-		panic(err)
+		panic("interp: GC layout contains pointer data")
 	}
 	rawByteValues := buf.buf[r.pointerSize:]
 	rawBytes := make([]byte, len(rawByteValues))
