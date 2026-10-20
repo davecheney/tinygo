@@ -270,6 +270,8 @@ smoketest-nxp: | build/smoke
 	@$(MD5SUM) $(SMOKE_OUT).hex
 	$(TINYGO) build -size short -o $(SMOKE_OUT).hex -target=arduino-mkrwifi1010 examples/blinky1
 	@$(MD5SUM) $(SMOKE_OUT).hex
+	$(TINYGO) build -size short -o $(SMOKE_OUT).hex -target=arduino-m0          examples/blinky1
+	@$(MD5SUM) $(SMOKE_OUT).hex
 
 smoketest-rp2xxx: SMOKE_OUT = build/smoke/rp2xxx
 smoketest-rp2xxx: | build/smoke

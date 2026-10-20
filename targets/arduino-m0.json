@@ -1,0 +1,9 @@
+{
+    "inherits": ["atsamd21g18a"],
+    "build-tags": ["arduino_m0"],
+    "serial": "usb",
+    "serial-port": ["2a03:804e", "2a03:004e"],
+    "linkerscript": "targets/arduino-m0.ld",
+    "flash-command": "avrdude -p atmega2560 -c stk500v2 -P {port} -b 57600 -U flash:w:{hex}:i",
+    "flash-1200-bps-reset": "true"
+}

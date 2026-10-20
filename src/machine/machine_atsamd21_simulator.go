@@ -1,4 +1,4 @@
-//go:build !baremetal && (gemma_m0 || qtpy || trinket_m0 || arduino_mkr1000 || arduino_mkrwifi1010 || arduino_nano33 || arduino_zero || circuitplay_express || feather_m0_express || feather_m0 || itsybitsy_m0 || p1am_100 || xiao)
+//go:build !baremetal && (gemma_m0 || qtpy || trinket_m0 || arduino_mkr1000 || arduino_mkrwifi1010 || arduino_nano33 || arduino_zero || arduino_m0 || circuitplay_express || feather_m0_express || feather_m0 || itsybitsy_m0 || p1am_100 || xiao)
 
 // Simulated atsamd21 chips.
 
