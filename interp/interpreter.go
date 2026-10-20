@@ -448,6 +448,16 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 					}
 					dstBuf := dstObj.buffer.asRawValue(r)
 					srcBuf := srcObj.buffer.asRawValue(r)
+					srcEnd, dstEnd := src.offset()+uint32(nBytes), dst.offset()+uint32(nBytes)
+					if srcBuf.splitsPointer(src.offset(), srcEnd, r.pointerSize) || dstBuf.splitsPointer(dst.offset(), dstEnd, r.pointerSize) || !r.pointersFit(dstObj, dst.offset(), srcBuf.buf[src.offset():srcEnd]) {
+						// Copy part of a pointer, or a pointer that the
+						// destination type cannot hold, at runtime.
+						err := r.runAtRuntime(fn, inst, locals, &mem, indent)
+						if err != nil {
+							return nil, mem, err
+						}
+						continue
+					}
 					copy(dstBuf.buf[dst.offset():][:nBytes], srcBuf.buf[src.offset():][:nBytes])
 					dstObj.buffer = dstBuf
 					mem.put(dst.index(), dstObj)
@@ -631,6 +641,11 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			val := operands[0]
 			if r.debug {
 				fmt.Fprintln(os.Stderr, indent+"store:", val, ptr)
+			}
+			if splitsPointer(r, val) {
+				// Part of a pointer cannot be an LLVM constant, so the store
+				// cannot run at runtime alone.
+				return nil, mem, r.errorAt(inst, errPartialPointer)
 			}
 			ok := mem.store(val, ptr)
 			if !ok {
@@ -984,7 +999,17 @@ func (r *runner) interpretICmp(lhs, rhs value, predicate llvm.IntPredicate) (boo
 		var result bool
 		lhsPointer, lhsErr := lhs.asPointer(r)
 		rhsPointer, rhsErr := rhs.asPointer(r)
-		if (lhsErr == nil) != (rhsErr == nil) {
+		if splitsPointer(r, lhs) || splitsPointer(r, rhs) {
+			return false, errPartialPointer
+		}
+		if lhs.len(r) != r.pointerSize {
+			// Only a pointer-sized value can be a pointer.
+			lhs, rhs, err := uintOperands(r, lhs, rhs)
+			if err != nil {
+				return false, err
+			}
+			result = lhs == rhs
+		} else if (lhsErr == nil) != (rhsErr == nil) {
 			// Fast path: only one is a pointer, so they can't be equal.
 			result = false
 		} else if lhsErr == nil {
@@ -1033,6 +1058,12 @@ func (r *runner) interpretICmp(lhs, rhs value, predicate llvm.IntPredicate) (boo
 		// _should_ be unreachable, until LLVM adds new icmp operands (unlikely)
 		panic("interp: unsupported icmp")
 	}
+}
+
+// splitsPointer returns true if v holds part of a pointer.
+func splitsPointer(r *runner, v value) bool {
+	raw, ok := v.(rawValue)
+	return ok && raw.splitsPointer(0, raw.len(r), r.pointerSize)
 }
 
 func uintOperands(r *runner, lhs, rhs value) (uint64, uint64, error) {

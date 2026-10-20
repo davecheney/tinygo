@@ -27,10 +27,15 @@ var (
 // serializing without a type (using rawValue.rawLLVMValue).
 var errInvalidPtrToIntSize = errors.New("interp: ptrtoint integer size does not equal pointer size")
 
+// errPartialPointer is returned for a value that holds part of a pointer. Its
+// bytes are known only after linking. It is recoverable by running at runtime.
+var errPartialPointer = errors.New("interp: part of a pointer")
+
 func isRecoverableError(err error) bool {
 	return err == errIntegerAsPointer || err == errUnsupportedInst ||
 		err == errUnsupportedRuntimeInst || err == errMapAlreadyCreated ||
-		err == errLoopUnrolled || err == errLoopTooLong || err == errInvalidPtrToIntSize
+		err == errLoopUnrolled || err == errLoopTooLong || err == errInvalidPtrToIntSize ||
+		err == errPartialPointer
 }
 
 // ErrorLine is one line in a traceback. The position may be missing.

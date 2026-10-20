@@ -313,6 +313,10 @@ func (mv *memoryView) load(p pointerValue, size uint32) value {
 		// External global, return nil.
 		return nil
 	}
+	if p.offset()+size <= obj.size && obj.buffer.asRawValue(mv.r).splitsPointer(p.offset(), p.offset()+size, mv.r.pointerSize) {
+		// Part of a pointer has no known value before linking.
+		return nil
+	}
 	if p.offset() == 0 && size == obj.size {
 		return obj.buffer.clone()
 	}
@@ -369,6 +373,14 @@ func (mv *memoryView) store(v value, p pointerValue) bool {
 	valueLen := v.len(mv.r)
 	if checks && p.offset()+valueLen > obj.size {
 		panic("interp: store out of bounds")
+	}
+	if obj.buffer.asRawValue(mv.r).splitsPointer(p.offset(), p.offset()+valueLen, mv.r.pointerSize) {
+		// The store would overwrite part of a pointer.
+		return false
+	}
+	if _, ok := v.(literalValue); !ok && !mv.r.pointersFit(obj, p.offset(), v.asRawValue(mv.r).buf) {
+		// The written back global could not hold this pointer.
+		return false
 	}
 	if p.offset() == 0 && valueLen == obj.buffer.len(mv.r) {
 		obj.buffer = v.clone()
@@ -860,8 +872,14 @@ func (v rawValue) rawLLVMValue(mem *memoryView) (llvm.Value, error) {
 	}
 
 	// Create structFields, converting the rawValue to a LLVM value.
+	pointerAlign := uint32(mem.r.targetData.ABITypeAlignment(mem.r.dataPtrType))
 	for i := uint32(0); i < uint32(len(v.buf)); {
 		if v.buf[i] > 255 {
+			if v.splitsPointer(i, min(i+mem.r.pointerSize, uint32(len(v.buf))), mem.r.pointerSize) || i%pointerAlign != 0 {
+				// The struct below is not packed, so it can only hold whole
+				// pointers at aligned offsets.
+				return llvm.Value{}, errPartialPointer
+			}
 			addBytes()
 			field, err := pointerValue{v.buf[i]}.toLLVMValue(llvm.Type{}, mem)
 			if err != nil {
@@ -894,6 +912,17 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 	}
 	if isZero {
 		return llvm.ConstNull(llvmType), nil
+	}
+	if kind := llvmType.TypeKind(); kind != llvm.StructTypeKind && kind != llvm.ArrayTypeKind && v.hasPointer() {
+		// Only a pointer or uintptr element can hold a pointer, and only all of
+		// it. Do not write the pointer bytes as zero or as a different pointer.
+		whole := len(v.buf) == int(mem.r.pointerSize) && !v.splitsPointer(0, mem.r.pointerSize, mem.r.pointerSize)
+		if !whole {
+			return llvm.Value{}, errPartialPointer
+		}
+		if kind != llvm.IntegerTypeKind && kind != llvm.PointerTypeKind {
+			return llvm.Value{}, errInvalidPtrToIntSize
+		}
 	}
 	switch llvmType.TypeKind() {
 	case llvm.IntegerTypeKind:
@@ -1216,6 +1245,94 @@ func (v rawValue) hasPointer() bool {
 		}
 	}
 	return false
+}
+
+// splitsPointer returns true if the bytes from start to end touch a pointer that
+// is not whole inside them. Each pointer is a run of pointerSize equal words, so
+// a run of another length has lost part of a pointer.
+func (v rawValue) splitsPointer(start, end, pointerSize uint32) bool {
+	for i := start; i < end; {
+		p := v.buf[i]
+		if p <= 255 {
+			i++
+			continue
+		}
+		runStart, runEnd := i, i+1
+		for runStart > 0 && v.buf[runStart-1] == p {
+			runStart--
+		}
+		for runEnd < uint32(len(v.buf)) && v.buf[runEnd] == p {
+			runEnd++
+		}
+		if (runEnd-runStart)%pointerSize != 0 || (i-runStart)%pointerSize != 0 {
+			return true
+		}
+		if runEnd > end && (end-runStart)%pointerSize != 0 {
+			return true
+		}
+		i = runEnd
+	}
+	return false
+}
+
+// pointersFit returns true if each pointer in buf, written at offset in obj,
+// has a pointer or pointer-sized integer slot in the LLVM type of obj.
+func (r *runner) pointersFit(obj object, offset uint32, buf []uint64) bool {
+	for i := uint32(0); i < uint32(len(buf)); i++ {
+		if buf[i] > 255 {
+			if !r.pointerFits(obj, uint64(offset+i)) {
+				return false
+			}
+			i += r.pointerSize - 1
+		}
+	}
+	return true
+}
+
+// pointerFits returns true if the LLVM type that obj is written back with has a
+// pointer or pointer-sized integer at offset.
+func (r *runner) pointerFits(obj object, offset uint64) bool {
+	var t llvm.Type
+	switch {
+	case !obj.llvmGlobal.IsNil():
+		t = obj.llvmGlobal.GlobalValueType()
+	case !obj.llvmType.IsNil():
+		t = obj.llvmType
+	case !obj.llvmLayoutType.IsNil():
+		// The layout repeats to fill the object, see pointerValue.toLLVMValue.
+		t = obj.llvmLayoutType
+		offset %= r.targetData.TypeAllocSize(t)
+	default:
+		// rawLLVMValue puts each pointer at an aligned offset.
+		return offset%uint64(r.targetData.ABITypeAlignment(r.dataPtrType)) == 0
+	}
+	for {
+		switch t.TypeKind() {
+		case llvm.PointerTypeKind:
+			return offset == 0
+		case llvm.IntegerTypeKind:
+			return offset == 0 && t.IntTypeWidth() == int(r.pointerSize)*8
+		case llvm.ArrayTypeKind:
+			elementSize := r.targetData.TypeAllocSize(t.ElementType())
+			if elementSize == 0 || offset/elementSize >= uint64(t.ArrayLength()) {
+				return false
+			}
+			offset %= elementSize
+			t = t.ElementType()
+		case llvm.StructTypeKind:
+			i := t.StructElementTypesCount() - 1
+			for i >= 0 && r.targetData.ElementOffset(t, i) > offset {
+				i--
+			}
+			if i < 0 {
+				return false
+			}
+			offset -= r.targetData.ElementOffset(t, i)
+			t = t.StructElementTypes()[i]
+		default:
+			return false
+		}
+	}
 }
 
 // localValue is a special implementation of the value interface. It is a
