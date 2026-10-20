@@ -15,13 +15,14 @@ import (
 // Functions are in SSA form, just like the LLVM version if it. The first block
 // (blocks[0]) is the entry block.
 type function struct {
-	llvmFn     llvm.Value
-	name       string       // precalculated llvmFn.Name()
-	params     []llvm.Value // precalculated llvmFn.Params()
-	blocks     []*basicBlock
-	locals     map[llvm.Value]int
-	deferFrame llvm.Value
-	deferStack llvm.Value
+	llvmFn               llvm.Value
+	name                 string       // precalculated llvmFn.Name()
+	params               []llvm.Value // precalculated llvmFn.Params()
+	blocks               []*basicBlock
+	locals               map[llvm.Value]int
+	noRuntimeInitializer bool
+	deferFrame           llvm.Value
+	deferStack           llvm.Value
 }
 
 // basicBlock represents a LLVM basic block and contains a slice of
@@ -72,11 +73,13 @@ func (inst *instruction) opcodeName() string {
 // version of the function. As far as possible, all operands are preprocessed so
 // that the interpreter doesn't have to call into LLVM.
 func (r *runner) compileFunction(llvmFn llvm.Value) *function {
+	noruntime := llvmFn.GetStringAttributeAtIndex(-1, "tinygo-noruntime")
 	fn := &function{
-		llvmFn: llvmFn,
-		name:   llvmFn.Name(),
-		params: llvmFn.Params(),
-		locals: make(map[llvm.Value]int),
+		llvmFn:               llvmFn,
+		name:                 llvmFn.Name(),
+		params:               llvmFn.Params(),
+		locals:               make(map[llvm.Value]int),
+		noRuntimeInitializer: !noruntime.IsNil() && noruntime.GetStringValue() != "",
 	}
 	if llvmFn.IsDeclaration() {
 		// Nothing to do.

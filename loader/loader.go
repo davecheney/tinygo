@@ -89,15 +89,18 @@ type PackageJSON struct {
 type Package struct {
 	PackageJSON
 
-	program      *Program
-	Files        []*ast.File
-	FileHashes   map[string][]byte
-	CFlags       []string // CFlags used during CGo preprocessing (only set if CGo is used)
-	CXXFlags     []string // flags used to compile C++ files
-	CGoHeaders   []string // text above 'import "C"' lines
-	EmbedGlobals map[string][]*EmbedFile
-	Pkg          *types.Package
-	info         types.Info
+	program       *Program
+	Files         []*ast.File
+	FileHashes    map[string][]byte
+	CFlags        []string // CFlags used during CGo preprocessing (only set if CGo is used)
+	CXXFlags      []string // flags used to compile C++ files
+	CGoHeaders    []string // text above 'import "C"' lines
+	EmbedGlobals  map[string][]*EmbedFile
+	Pkg           *types.Package
+	info          types.Info
+	noRuntimeVars map[*types.Var]bool
+
+	NoRuntimeInitializers map[*ast.FuncLit]string // generated initializer -> variable names
 }
 
 type EmbedFile struct {
@@ -681,6 +684,7 @@ func (p *Package) Check() error {
 	p.Pkg = typesPkg
 
 	p.extractEmbedLines(checker.Error)
+	typeErrors = append(typeErrors, p.checkNoRuntimeInitializers()...)
 	if len(typeErrors) != 0 {
 		return Errors{p, typeErrors}
 	}

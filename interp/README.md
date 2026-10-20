@@ -54,6 +54,27 @@ The `//go:noruntime` directive requires a function to have no runtime uses
 after initialization code is evaluated. It does not make new code eligible for
 evaluation. Put the directive on a function definition, with no arguments.
 
+The directive can also mark a package-level variable with an explicit
+initializer:
+
+```go
+//go:noruntime
+var Reader io.Reader = &reader{}
+```
+
+For a variable, the complete initializer must be evaluated at compile time,
+including its assignment and side effects in called functions. Other variables
+in the package can still have runtime initializers. The variable can be read
+and assigned at runtime, and an initialized callback can be called at runtime.
+The directive can mark a single entry in a `var` block or the whole block.
+For multiple variables in one declaration, it applies to all their initializers.
+
+The loader puts each marked initializer in a generated function without
+changing initialization order. Interp rolls back a partial evaluation of this
+function and retains its call for the next pass. This preserves the check
+through cached package IR. The final check rejects the initializer if it
+still needs runtime work after whole-program interpretation.
+
 The compiler stores the directive as a `tinygo-noruntime` LLVM function
 attribute. After whole-program interpretation, the optimizer removes dead code
 and rejects any marked function that remains. This check runs before inlining

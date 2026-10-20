@@ -25,20 +25,21 @@ import (
 // The linkName value contains a valid link name, even if //go:linkname is not
 // present.
 type functionInfo struct {
-	wasmModule    string     // go:wasm-module
-	wasmName      string     // wasm-export-name or wasm-import-name in the IR
-	wasmExport    string     // go:wasmexport is defined (export is unset, this adds an exported wrapper)
-	wasmExportPos token.Pos  // position of //go:wasmexport comment
-	linkName      string     // go:linkname, go:export - the IR function name
-	section       string     // go:section - object file section name
-	exported      bool       // go:export, CGo
-	interrupt     bool       // go:interrupt
-	nobounds      bool       // go:nobounds
-	noescape      bool       // go:noescape
-	noheap        bool       // go:noheap
-	noruntime     bool       // go:noruntime
-	variadic      bool       // go:variadic (CGo only)
-	inline        inlineType // go:inline
+	wasmModule           string    // go:wasm-module
+	wasmName             string    // wasm-export-name or wasm-import-name in the IR
+	wasmExport           string    // go:wasmexport is defined (export is unset, this adds an exported wrapper)
+	wasmExportPos        token.Pos // position of //go:wasmexport comment
+	linkName             string    // go:linkname, go:export - the IR function name
+	section              string    // go:section - object file section name
+	exported             bool      // go:export, CGo
+	interrupt            bool      // go:interrupt
+	nobounds             bool      // go:nobounds
+	noescape             bool      // go:noescape
+	noheap               bool      // go:noheap
+	noruntime            bool      // go:noruntime
+	noruntimeInitializer string
+	variadic             bool       // go:variadic (CGo only)
+	inline               inlineType // go:inline
 }
 
 type inlineType int
@@ -387,6 +388,12 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 	}
 	decl, _ := syntax.(*ast.FuncDecl)
 	hasBody := decl != nil && decl.Body != nil
+	if literal, ok := syntax.(*ast.FuncLit); ok && c.loaderPkg != nil {
+		if name := c.loaderPkg.NoRuntimeInitializers[literal]; name != "" {
+			info.noruntime = true
+			info.noruntimeInitializer = name
+		}
+	}
 
 	// Read all pragmas of this function.
 	var pragmas []*ast.Comment

@@ -20,6 +20,14 @@ func TestNoRuntime(t *testing.T) {
 //go:noruntime
 func calc(n int) int { return n * 7 }
 func main() { println(result) }`, false},
+		{"evaluated-init", `var result int
+//go:noruntime
+func init() { result = 12 * 7 }
+func main() { println(result) }`, false},
+		{"init-loop-limit", `var result int
+//go:noruntime
+func init() { for i := 0; i < 1001; i++ { result += i } }
+func main() { println(result) }`, true},
 		{"loop-limit", `var result = calc(1001)
 //go:noruntime
 func calc(n int) int { sum := 0; for i := 0; i < n; i++ { sum += i }; return sum }
@@ -153,6 +161,223 @@ func main() { println(callback.other()) }`, true},
 					}
 					if strings.Contains(string(data), "tinygo-noruntime") {
 						t.Fatal("noruntime function remains in output")
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestNoRuntimeStartup(t *testing.T) {
+	const pwm = `import "machine"
+func main() { println(machine.PWM0.Configure(machine.PWMConfig{Period: 1000000})) }`
+	const midi = `import "machine/usb/adc/midi"
+func main() { println(midi.Midi) }`
+	const files = `import "os"
+func main() { file, err := os.Open("."); println(file, err) }`
+	for _, tc := range []struct {
+		target string
+		name   string
+		source string
+	}{
+		{"circuitplay-express", "keyboard", `import "machine/usb/hid/keyboard"
+func main() { println(keyboard.Keyboard) }`},
+		{"feather-m4", "mouse", `import "machine/usb/hid/mouse"
+func main() { mouse.Port().Move(1, 0) }`},
+		{"pico", "joystick", `import "machine/usb/hid/joystick"
+func main() { joystick.Port().SendState() }`},
+		{"pico2", "midi", midi},
+		{"feather-nrf52840", "midi", midi},
+		{"pico", "pwm", pwm},
+		{"pico2", "pwm", pwm},
+		{"nucleo-h753zi", "timers", `import "machine"
+func main() {
+	println(machine.TIM1.Configure(machine.PWMConfig{Period: 1000000}))
+	println(machine.TIM2.Configure(machine.PWMConfig{Period: 1000000}))
+}`},
+		{"feather-stm32f405", "uart", `import "machine"
+func main() { machine.UART1.Configure(machine.UARTConfig{}) }`},
+		{"embedfire-py32f030", "uart", `import "machine"
+func main() {
+	println(machine.DefaultUART.Configure(machine.UARTConfig{}))
+	println(machine.UART2.Configure(machine.UARTConfig{}))
+}`},
+		{"py32f410xb", "uart", `import "machine"
+func main() { println(machine.DefaultUART.Configure(machine.UARTConfig{})) }`},
+		{"feather-nrf52840", "rand", `import "crypto/rand"
+func main() { var b [8]byte; n, err := rand.Read(b[:]); println(n, err) }`},
+		{"wasip1", "files", files},
+		{"wasip2", "files", files},
+	} {
+		t.Run(tc.target+"/"+tc.name, func(t *testing.T) {
+			for _, opt := range []string{"0", "2"} {
+				t.Run(opt, func(t *testing.T) {
+					tmpdir := t.TempDir()
+					path := filepath.Join(tmpdir, "main.go")
+					if err := os.WriteFile(path, []byte("package main\n"+tc.source+"\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					options := optionsFromTarget(tc.target, sema)
+					options.Opt = opt
+					options.InterpMaxLoopIterations = interp.DefaultMaxInterpBlockEntries
+					config, err := builder.NewConfig(&options)
+					if err != nil {
+						t.Fatal(err)
+					}
+					out := filepath.Join(tmpdir, "main.ll")
+					if _, err := builder.Build(path, out, tmpdir, config); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestNoRuntimeInitializers(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		source string
+		err    string
+	}{
+		{"interface", `type reader struct{}
+type Reader interface { Read() int }
+func (*reader) Read() int { return 84 }
+//go:noruntime
+var result Reader = &reader{}
+func main() { println(result.Read()) }`, ""},
+		{"inferred", `//go:noruntime
+var result = 12 * 7
+func main() { println(result) }`, ""},
+		{"mutable", `//go:noruntime
+var result = 84
+func main() { result++; println(result) }`, ""},
+		{"explicit-init", `//go:noruntime
+var result = 84
+func init() { result++ }
+func main() { println(result) }`, ""},
+		{"shadowed-builtins", `var bool, false int
+//go:noruntime
+var result = 84
+func main() { println(result, bool, false) }`, ""},
+		{"aggregate", `//go:noruntime
+var result = struct { values [2]int }{values: [2]int{12, 7}}
+func main() { println(result.values[0] * result.values[1]) }`, ""},
+		{"map", `//go:noruntime
+var result = map[string]int{"answer": 84}
+func main() { println(result["answer"]) }`, ""},
+		{"generic", `func value[T ~int](n T) T { return n * 7 }
+//go:noruntime
+var result = value(12)
+func main() { println(result) }`, ""},
+		{"callback", `//go:noruntime
+var result = func() int { return 84 }
+func main() { println(result()) }`, ""},
+		{"mixed", `func runtimeValue() int { println("runtime"); return 1 }
+var other = runtimeValue()
+//go:noruntime
+var result = 84
+func main() { println(other, result) }`, ""},
+		{"dependency-order", `//go:noruntime
+var result = func() int { if other != 84 { panic("wrong order") }; return other }()
+var other = 84
+func main() { println(result) }`, ""},
+		{"side-effects-once", `var count int
+//go:noruntime
+var result = func() int { count++; return count }()
+//go:noruntime
+var checked = func() int { if count != 1 || result != 1 { panic("wrong count") }; return result }()
+func main() { println(checked) }`, ""},
+		{"multiple-results", `func values() (int, string) { return 84, "ok" }
+//go:noruntime
+var result, other = values()
+func main() { println(result, other) }`, ""},
+		{"multiple-expressions", `//go:noruntime
+var result, other = 84, "ok"
+func main() { println(result, other) }`, ""},
+		{"group", `//go:noruntime
+var (
+	result = 84
+	other = "ok"
+)
+func main() { println(result, other) }`, ""},
+		{"group-entry", `var (
+	//go:noruntime
+	result = 84
+	other = func() int { println("runtime"); return 1 }()
+)
+func main() { println(result, other) }`, ""},
+		{"blank", `//go:noruntime
+var _ = 84
+func main() {}`, ""},
+		{"loop", `//go:noruntime
+var result = func() int { sum := 0; for i := 0; i < 999; i++ { sum += i }; return sum }()
+func main() { println(result) }`, ""},
+		{"loop-limit", `//go:noruntime
+var result = func() int { sum := 0; for i := 0; i < 1001; i++ { sum += i }; return sum }()
+func main() { println(result) }`, "//go:noruntime initializer for main.result remains reachable at runtime"},
+		{"nested-runtime-effect", `func value() int { println("runtime"); return 84 }
+//go:noruntime
+var result = value()
+func main() { println(result) }`, "//go:noruntime initializer for main.result remains reachable at runtime"},
+		{"blank-runtime-effect", `//go:noruntime
+var _ = func() int { println("runtime"); return 84 }()
+func main() {}`, "//go:noruntime initializer for main._ remains reachable at runtime"},
+		{"volatile", `import "runtime/volatile"
+var register volatile.Register32
+//go:noruntime
+var result = func() int { register.Set(1); return 84 }()
+func main() { println(result) }`, "//go:noruntime initializer for main.result remains reachable at runtime"},
+		{"known-value-dependency", `var other = func() int { println("runtime"); return 84 }()
+//go:noruntime
+var result = other
+func main() { println(result) }`, ""},
+		{"runtime-dependency", `import "runtime/volatile"
+var register volatile.Register32
+var other = register.Get()
+//go:noruntime
+var result = other
+func main() { println(result) }`, "//go:noruntime initializer for main.result remains reachable at runtime"},
+		{"missing-initializer", `//go:noruntime
+var result int
+func main() { println(result) }`, "//go:noruntime variable requires an initializer"},
+		{"parameters", `//go:noruntime extra
+var result = 84
+func main() { println(result) }`, "//go:noruntime does not accept parameters"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, opt := range []string{"0", "2"} {
+				t.Run(opt, func(t *testing.T) {
+					dir := t.TempDir()
+					path := filepath.Join(dir, "main.go")
+					if err := os.WriteFile(path, []byte("package main\n"+tc.source+"\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					options := optionsFromTarget("wasip1", sema)
+					options.Opt = opt
+					options.Scheduler = "none"
+					options.InterpMaxLoopIterations = interp.DefaultMaxInterpBlockEntries
+					config, err := builder.NewConfig(&options)
+					if err != nil {
+						t.Fatal(err)
+					}
+					out := filepath.Join(dir, "main.ll")
+					_, err = builder.Build(path, out, dir, config)
+					if tc.err != "" {
+						if err == nil || !strings.Contains(err.Error(), tc.err) {
+							t.Fatalf("expected %q, got %v", tc.err, err)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					data, err := os.ReadFile(out)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if strings.Contains(string(data), "tinygo-noruntime") {
+						t.Fatal("noruntime initializer remains in output")
 					}
 				})
 			}
