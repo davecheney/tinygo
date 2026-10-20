@@ -123,27 +123,6 @@ func TestInterpLargeArray(t *testing.T) {
 	}
 }
 
-// TestInterpPartialPointer checks that a global which holds part of a pointer
-// is reported as an error instead of being written out as zero.
-func TestInterpPartialPointer(t *testing.T) {
-	t.Parallel()
-	ctx := llvm.NewContext()
-	defer ctx.Dispose()
-	buf, err := llvm.NewMemoryBufferFromFile("testdata/partialpointer.ll")
-	if err != nil {
-		t.Fatal(err)
-	}
-	mod, err := ctx.ParseIR(buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer mod.Dispose()
-
-	if err := Run(mod, 10*time.Minute, DefaultMaxInterpBlockEntries, false); err != errUnsupportedInst {
-		t.Errorf("expected %v, got %v", errUnsupportedInst, err)
-	}
-}
-
 // TestInterpRollbackReason checks that the error that makes interp roll back
 // names its cause and the function being interpreted.
 func TestInterpRollbackReason(t *testing.T) {

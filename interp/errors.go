@@ -29,6 +29,10 @@ var (
 	// passed type does not fit the data to serialize. It is recoverable by
 	// serializing without a type (using rawValue.rawLLVMValue).
 	errInvalidPtrToIntSize = &recoverableError{reason: "interp: ptrtoint integer size does not equal pointer size"}
+
+	// errPartialPointer is returned for a value that holds part of a pointer. Its
+	// bytes are known only after linking. It is recoverable by running at runtime.
+	errPartialPointer = &recoverableError{reason: "interp: part of a pointer"}
 )
 
 func isRecoverableError(err error) bool {
