@@ -1,0 +1,8 @@
+{
+	"inherits": ["cortex-m3"],
+	"build-tags": ["lpc18xx", "nxp"],
+	"serial": "none",
+	"extra-files": [
+		"src/device/nxp/lpc18xx.s"
+	]
+}

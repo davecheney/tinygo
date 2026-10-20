@@ -1,0 +1,6 @@
+{
+	"inherits": ["lpc18xx"],
+	"build-tags": ["tessel1"],
+	"linkerscript": "targets/tessel1.ld",
+	"flash-command": "dfu-util -d 1d50:6097 -a 0 -D {bin}"
+}
