@@ -1586,15 +1586,16 @@ var (
 		}
 
 		fmt.Fprint(w, "\nconst(")
+		seen := map[string]uint64{}
 		for _, register := range peripheral.Registers {
 			if len(register.Constants) != 0 {
-				writeGoRegisterConstants(w, register, register.Name)
+				writeGoRegisterConstants(w, register, register.Name, seen)
 			}
 			if register.Registers == nil {
 				continue
 			}
 			for _, subregister := range register.Registers {
-				writeGoRegisterConstants(w, subregister, register.Name+"."+subregister.Name)
+				writeGoRegisterConstants(w, subregister, register.Name+"."+subregister.Name, seen)
 			}
 		}
 		w.WriteString(")\n")
@@ -1603,7 +1604,9 @@ var (
 	return w.Flush()
 }
 
-func writeGoRegisterConstants(w *bufio.Writer, register *PeripheralField, name string) {
+// Registers declared by several dim arrays with the same name, such as the
+// LPC18xx SCU pin registers, repeat identical constants. Write them once.
+func writeGoRegisterConstants(w *bufio.Writer, register *PeripheralField, name string, seen map[string]uint64) {
 	w.WriteString("\n\t// " + name)
 	if register.Description != "" {
 		if isMultiline(register.Description) {
@@ -1616,6 +1619,10 @@ func writeGoRegisterConstants(w *bufio.Writer, register *PeripheralField, name s
 	}
 	w.WriteByte('\n')
 	for _, bitfield := range register.Constants {
+		if v, ok := seen[bitfield.Name]; ok && v == bitfield.Value {
+			continue
+		}
+		seen[bitfield.Name] = bitfield.Value
 		if bitfield.Description != "" {
 			for _, l := range splitLine(bitfield.Description) {
 				w.WriteString("\t// " + l + "\n")
@@ -1737,6 +1744,7 @@ Default_Handler:
 // https://sourceware.org/binutils/docs/as/Section.html#ELF-Version
 .section .isr_vector, "a", %progbits
 .global  __isr_vector
+.weak    __isr_vector_signature
 __isr_vector:
     // Interrupt vector as defined by Cortex-M, starting with the stack top.
     // On reset, SP is initialized with *0x0 and PC is loaded with *0x4, loading
@@ -1748,7 +1756,7 @@ __isr_vector:
     .long MemoryManagement_Handler
     .long BusFault_Handler
     .long UsageFault_Handler
-    .long 0
+    .long __isr_vector_signature
     .long 0
     .long 0
     .long 0
