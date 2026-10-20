@@ -1088,6 +1088,7 @@ func (r *runner) runAtRuntime(fn *function, inst instruction, locals []value, me
 			return r.errorAt(inst, err)
 		}
 		result = r.builder.CreateLoad(inst.llvmInst.Type(), operands[0], inst.name)
+		result.SetAlignment(inst.llvmInst.Alignment())
 		if inst.llvmInst.IsVolatile() {
 			result.SetVolatile(true)
 		}
@@ -1100,6 +1101,7 @@ func (r *runner) runAtRuntime(fn *function, inst instruction, locals []value, me
 			return r.errorAt(inst, err)
 		}
 		result = r.builder.CreateStore(operands[0], operands[1])
+		result.SetAlignment(inst.llvmInst.Alignment())
 		if inst.llvmInst.IsVolatile() {
 			result.SetVolatile(true)
 		}
