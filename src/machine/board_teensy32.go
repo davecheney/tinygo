@@ -93,3 +93,13 @@ const (
 	defaultUART2RX = D07
 	defaultUART2TX = D08
 )
+
+const (
+	I2C0_SDA_PIN = D18
+	I2C0_SCL_PIN = D19
+	I2C1_SDA_PIN = D30
+	I2C1_SCL_PIN = D29
+
+	SDA_PIN = I2C0_SDA_PIN
+	SCL_PIN = I2C0_SCL_PIN
+)
