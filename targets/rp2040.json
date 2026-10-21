@@ -15,6 +15,7 @@
         "src/device/rp/rp2040.s"
     ],
     "ldflags": [
+        "--defsym=__flash_size=2048K",
         "--defsym=__num_stacks=2"
     ],
     "linkerscript": "targets/rp2040.ld",
