@@ -1,6 +1,9 @@
 package main
 
-import "runtime/volatile"
+import (
+	"runtime/volatile"
+	"sync"
+)
 
 type Thing struct {
 	name string
@@ -121,6 +124,113 @@ func main() {
 	err = deepForwardEscape()
 	clobberStack()
 	println("deep forward:", err.(*multiReturnErr).x[1])
+
+	testOpenCodedDefers()
+}
+
+var (
+	openMu    sync.Mutex
+	openCount int
+	openLog   []int
+	openPtr   *int
+	openWG    sync.WaitGroup
+)
+
+func openNote(i int) { openLog = append(openLog, i) }
+
+func openPanic(i int) { panic(i) }
+
+//go:noinline
+func openUnlock() int {
+	openMu.Lock()
+	defer openMu.Unlock()
+	return openCount
+}
+
+//go:noinline
+func openOrder() {
+	defer openNote(1)
+	defer openNote(2)
+	defer openNote(3)
+}
+
+//go:noinline
+func openArgs() {
+	i := 10
+	defer openNote(i)
+	i = 20
+	openNote(i)
+}
+
+//go:noinline
+func openNamedResult() (r int) {
+	defer func() { r *= 2 }()
+	r = 21
+	return
+}
+
+//go:noinline
+func openEarlyReturn(early bool) int {
+	if early {
+		return 1
+	}
+	defer openNote(30)
+	return 2
+}
+
+//go:noinline
+func openConditional(cond bool) {
+	if cond {
+		defer openNote(40)
+	}
+	openNote(41)
+}
+
+//go:noinline
+func openPanicBefore() int {
+	v := *openPtr
+	defer openNote(50)
+	return v
+}
+
+//go:noinline
+func openPanicInDefer() {
+	defer openPanic(60)
+}
+
+//go:noinline
+func openCatch(f func()) (recovered any) {
+	defer func() { recovered = recover() }()
+	f()
+	return nil
+}
+
+//go:noinline
+func openWorker(i int) {
+	defer openWG.Done()
+	openNote(70 + i)
+}
+
+func testOpenCodedDefers() {
+	openCount = 5
+	println("open unlock:", openUnlock(), openMu.TryLock())
+	openMu.Unlock()
+	openOrder()
+	openArgs()
+	println("open named result:", openNamedResult())
+	println("open early return:", openEarlyReturn(true), openEarlyReturn(false))
+	openConditional(true)
+	openConditional(false)
+	println("open panic before:", openCatch(func() { openPanicBefore() }) != nil)
+	println("open panic in defer:", openCatch(openPanicInDefer).(int))
+	openWG.Add(1)
+	go openWorker(1)
+	openWG.Wait()
+	print("open log:")
+	for _, v := range openLog {
+		print(" ", v)
+	}
+	println()
 }
 
 type multiReturnErr struct{ x [4]int }

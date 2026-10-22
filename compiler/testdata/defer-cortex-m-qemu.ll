@@ -132,72 +132,12 @@ entry:
 ; Function Attrs: nounwind
 define hidden void @main.deferNoPanicCall(ptr %context) unnamed_addr #0 {
 entry:
-  %defer.alloca = alloca { i32, ptr }, align 4
-  %deferframe.buf = alloca %runtime.deferFrame, align 4
-  %deferPtr = getelementptr inbounds nuw i8, ptr %deferframe.buf, i32 24
-  %0 = call ptr @llvm.stacksave.p0()
-  call void @runtime.setupDeferFrame(ptr nonnull %deferframe.buf, ptr %0, ptr undef) #4
-  %defer.next = load ptr, ptr %deferPtr, align 4
-  store i32 0, ptr %defer.alloca, align 4
-  %defer.alloca.repack11 = getelementptr inbounds nuw i8, ptr %defer.alloca, i32 4
-  store ptr %defer.next, ptr %defer.alloca.repack11, align 4
-  store ptr %defer.alloca, ptr %deferPtr, align 4
   call void @main.noPanicCall(ptr undef)
-  br label %rundefers.block
-
-rundefers.after:                                  ; preds = %rundefers.end
-  call void @runtime.destroyDeferFrame(ptr nonnull %deferframe.buf, ptr undef) #4
-  ret void
-
-rundefers.block:                                  ; preds = %entry
-  br label %rundefers.loophead
-
-rundefers.loophead:                               ; preds = %rundefers.callback0, %rundefers.block
-  %1 = load ptr, ptr %deferPtr, align 4
-  %stackIsNil = icmp eq ptr %1, null
-  br i1 %stackIsNil, label %rundefers.end, label %rundefers.loop
-
-rundefers.loop:                                   ; preds = %rundefers.loophead
-  %stack.next.gep = getelementptr inbounds nuw i8, ptr %1, i32 4
-  %stack.next = load ptr, ptr %stack.next.gep, align 4
-  store ptr %stack.next, ptr %deferPtr, align 4
-  %callback = load i32, ptr %1, align 4
-  switch i32 %callback, label %rundefers.default [
-    i32 0, label %rundefers.callback0
-  ]
-
-rundefers.callback0:                              ; preds = %rundefers.loop
   call void @"main.deferNoPanicCall$1"(ptr undef)
-  br label %rundefers.loophead
-
-rundefers.default:                                ; preds = %rundefers.loop
-  unreachable
-
-rundefers.end:                                    ; preds = %rundefers.loophead
-  br label %rundefers.after
-
-recover:                                          ; preds = %rundefers.end1
   ret void
 
-lpad:                                             ; No predecessors!
-  br label %rundefers.loophead4
-
-rundefers.loophead4:                              ; preds = %rundefers.callback010, %lpad
-  br i1 poison, label %rundefers.end1, label %rundefers.loop3
-
-rundefers.loop3:                                  ; preds = %rundefers.loophead4
-  switch i32 poison, label %rundefers.default2 [
-    i32 0, label %rundefers.callback010
-  ]
-
-rundefers.callback010:                            ; preds = %rundefers.loop3
-  br label %rundefers.loophead4
-
-rundefers.default2:                               ; preds = %rundefers.loop3
-  unreachable
-
-rundefers.end1:                                   ; preds = %rundefers.loophead4
-  br label %recover
+recover:                                          ; No predecessors!
+  ret void
 }
 
 ; Function Attrs: nounwind
@@ -220,75 +160,12 @@ entry:
 ; Function Attrs: nounwind
 define hidden i1 @main.deferNoPanicArithmetic(i32 %a, i32 %b, ptr %context) unnamed_addr #0 {
 entry:
-  %defer.alloca = alloca { i32, ptr }, align 4
-  %deferframe.buf = alloca %runtime.deferFrame, align 4
-  %deferPtr = getelementptr inbounds nuw i8, ptr %deferframe.buf, i32 24
-  %0 = call ptr @llvm.stacksave.p0()
-  call void @runtime.setupDeferFrame(ptr nonnull %deferframe.buf, ptr %0, ptr undef) #4
-  %1 = call align 1 dereferenceable(1) ptr @runtime.alloc(i32 1, ptr nonnull inttoptr (i32 3 to ptr), ptr undef) #4
-  %defer.next = load ptr, ptr %deferPtr, align 4
-  store i32 0, ptr %defer.alloca, align 4
-  %defer.alloca.repack11 = getelementptr inbounds nuw i8, ptr %defer.alloca, i32 4
-  store ptr %defer.next, ptr %defer.alloca.repack11, align 4
-  store ptr %defer.alloca, ptr %deferPtr, align 4
-  %2 = call i1 @main.noPanicArithmetic(i32 %a, i32 %b, ptr undef)
-  store i1 %2, ptr %1, align 1
-  br label %rundefers.block
-
-rundefers.after:                                  ; preds = %rundefers.end
-  %3 = load i1, ptr %1, align 1
-  call void @runtime.destroyDeferFrame(ptr nonnull %deferframe.buf, ptr undef) #4
-  ret i1 %3
-
-rundefers.block:                                  ; preds = %entry
-  br label %rundefers.loophead
-
-rundefers.loophead:                               ; preds = %rundefers.callback0, %rundefers.block
-  %4 = load ptr, ptr %deferPtr, align 4
-  %stackIsNil = icmp eq ptr %4, null
-  br i1 %stackIsNil, label %rundefers.end, label %rundefers.loop
-
-rundefers.loop:                                   ; preds = %rundefers.loophead
-  %stack.next.gep = getelementptr inbounds nuw i8, ptr %4, i32 4
-  %stack.next = load ptr, ptr %stack.next.gep, align 4
-  store ptr %stack.next, ptr %deferPtr, align 4
-  %callback = load i32, ptr %4, align 4
-  switch i32 %callback, label %rundefers.default [
-    i32 0, label %rundefers.callback0
-  ]
-
-rundefers.callback0:                              ; preds = %rundefers.loop
+  %0 = call i1 @main.noPanicArithmetic(i32 %a, i32 %b, ptr undef)
   call void @"main.deferNoPanicArithmetic$1"(ptr undef)
-  br label %rundefers.loophead
+  ret i1 %0
 
-rundefers.default:                                ; preds = %rundefers.loop
-  unreachable
-
-rundefers.end:                                    ; preds = %rundefers.loophead
-  br label %rundefers.after
-
-recover:                                          ; preds = %rundefers.end1
+recover:                                          ; No predecessors!
   ret i1 poison
-
-lpad:                                             ; No predecessors!
-  br label %rundefers.loophead4
-
-rundefers.loophead4:                              ; preds = %rundefers.callback010, %lpad
-  br i1 poison, label %rundefers.end1, label %rundefers.loop3
-
-rundefers.loop3:                                  ; preds = %rundefers.loophead4
-  switch i32 poison, label %rundefers.default2 [
-    i32 0, label %rundefers.callback010
-  ]
-
-rundefers.callback010:                            ; preds = %rundefers.loop3
-  br label %rundefers.loophead4
-
-rundefers.default2:                               ; preds = %rundefers.loop3
-  unreachable
-
-rundefers.end1:                                   ; preds = %rundefers.loophead4
-  br label %recover
 }
 
 ; Function Attrs: allockind("alloc,zeroed") allocsize(0)

@@ -15,6 +15,7 @@ package compiler
 
 import (
 	"go/types"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -43,7 +44,7 @@ func (b *builder) usesReturnUnwind() bool {
 // hasDeferFrame returns whether the current function needs to catch panics and
 // run defers.
 func (b *builder) hasDeferFrame() bool {
-	return b.fn.Recover != nil && b.supportsRecover()
+	return b.fn.Recover != nil && b.supportsRecover() && !b.openCodedDefers
 }
 
 // deferInitFunc sets up this function for future deferred calls. It must be
@@ -56,6 +57,12 @@ func (b *builder) deferInitFunc() {
 	b.deferClosureFuncs = make(map[*ssa.Function]int)
 	b.deferExprFuncs = make(map[ssa.Value]int)
 	b.deferBuiltinFuncs = make(map[ssa.Value]deferBuiltin)
+
+	if b.canOpenCodeDefers() {
+		b.openCodedDefers = true
+		b.openDeferCalls = make(map[*ssa.Defer]openDeferCall)
+		return
+	}
 
 	if b.hasDeferFrame() {
 		// Set up the defer frame with the current stack pointer.
@@ -422,7 +429,10 @@ func (b *builder) loadDeferredCallParams(structType llvm.Type, ptr llvm.Value) [
 func (b *builder) createDefer(instr *ssa.Defer) {
 	// The pointer to the previous defer struct, which we will replace to
 	// make a linked list.
-	next := b.CreateLoad(b.dataPtrType, b.deferPtr, "defer.next")
+	next := llvm.ConstPointerNull(b.dataPtrType)
+	if !b.openCodedDefers {
+		next = b.CreateLoad(b.dataPtrType, b.deferPtr, "defer.next")
+	}
 
 	var values llvmValueList
 	if instr.Call.IsInvoke() {
@@ -528,6 +538,14 @@ func (b *builder) createDefer(instr *ssa.Defer) {
 		values.append(b.getCallArguments(instr.Call.Args, abi.params)...)
 	}
 
+	if b.openCodedDefers {
+		b.openDeferCalls[instr] = openDeferCall{
+			callback: b.allDeferFuncs[values.values[0].ZExtValue()],
+			params:   values.values[2:],
+		}
+		return
+	}
+
 	// Make a struct out of the collected values to put in the deferred call
 	// struct.
 	deferredCallType := b.ctx.StructType(values.types, false)
@@ -620,130 +638,7 @@ func (b *builder) createRunDefers() {
 		block := b.insertBasicBlock("rundefers.callback" + strconv.Itoa(i))
 		sw.AddCase(llvm.ConstInt(b.uintptrType, uint64(i), false), block)
 		b.SetInsertPointAtEnd(block)
-		switch callback := callback.(type) {
-		case *ssa.CallCommon:
-			// Call on an value or interface value.
-
-			// Get the real defer struct type and cast to it.
-			valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
-
-			if !callback.IsInvoke() {
-				//Expect funcValue to be passed through the deferred call.
-				valueTypes = append(valueTypes, b.getFuncType(callback.Signature()))
-			} else {
-				//Expect typecode
-				valueTypes = append(valueTypes, b.dataPtrType, b.dataPtrType)
-			}
-
-			var params []functionABIParam
-			if callback.IsInvoke() {
-				params = b.getInterfaceFunctionABI(callback.Signature()).params[1:]
-			} else {
-				params = b.getFunctionABI(callback.Signature(), false).params
-			}
-			valueTypes = b.appendStoredParamTypes(valueTypes, params)
-
-			// Extract the params from the struct (including receiver).
-			deferredCallType := b.ctx.StructType(valueTypes, false)
-			forwardParams := b.loadDeferredCallParams(deferredCallType, deferData)
-
-			var fnPtr llvm.Value
-			var fnType llvm.Type
-
-			if !callback.IsInvoke() {
-				// Isolate the func value.
-				funcValue := forwardParams[0]
-				forwardParams = forwardParams[1:]
-
-				//Get function pointer and context
-				var context llvm.Value
-				fnPtr, context = b.decodeFuncValue(funcValue)
-				fnType = b.getLLVMFunctionType(callback.Signature())
-
-				//Pass context
-				forwardParams = append(forwardParams, context)
-			} else {
-				// Move typecode from the start to the end of the list of
-				// parameters.
-				forwardParams = append(forwardParams[1:], forwardParams[0])
-				fnPtr = b.getInvokeFunction(callback)
-				fnType = fnPtr.GlobalValueType()
-
-				// Add the context parameter. An interface call cannot also be a
-				// closure but we have to supply the parameter anyway for platforms
-				// with a strict calling convention.
-				forwardParams = append(forwardParams, llvm.Undef(b.dataPtrType))
-			}
-			forwardParams = b.prependIndirectResult(callback.Signature(), false, forwardParams, "defer.result")
-
-			b.createInvokeWithAnalysis(fnType, fnPtr, forwardParams, "", true, true)
-
-		case *ssa.Function:
-			// Direct call.
-
-			// Get the real defer struct type and cast to it.
-			valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
-			exported := b.getFunctionInfo(callback).exported
-			abi := b.getFunctionABI(callback.Signature, exported)
-			valueTypes = b.appendStoredParamTypes(valueTypes, abi.params)
-			deferredCallType := b.ctx.StructType(valueTypes, false)
-
-			// Extract the params from the struct.
-			forwardParams := b.loadDeferredCallParams(deferredCallType, deferData)
-
-			// Plain TinyGo functions add some extra parameters to implement async functionality and function receivers.
-			// These parameters should not be supplied when calling into an external C/ASM function.
-			if !exported {
-				// Add the context parameter. We know it is ignored by the receiving
-				// function, but we have to pass one anyway.
-				forwardParams = append(forwardParams, llvm.Undef(b.dataPtrType))
-			}
-			forwardParams = b.prependIndirectResult(callback.Signature, exported, forwardParams, "defer.result")
-
-			// Call real function.
-			fnType, fn := b.getFunction(callback)
-			b.createInvokeWithAnalysis(fnType, fn, forwardParams, "", b.functionMayUnwind(callback), b.functionMaySuspend(callback))
-
-		case *ssa.MakeClosure:
-			// Get the real defer struct type and cast to it.
-			fn := callback.Fn.(*ssa.Function)
-			valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
-			abi := b.getFunctionABI(fn.Signature, false)
-			valueTypes = b.appendStoredParamTypes(valueTypes, abi.params)
-			valueTypes = append(valueTypes, b.dataPtrType) // closure
-			deferredCallType := b.ctx.StructType(valueTypes, false)
-
-			// Extract the params from the struct.
-			forwardParams := b.loadDeferredCallParams(deferredCallType, deferData)
-
-			// Call deferred function.
-			fnType, llvmFn := b.getFunction(fn)
-			forwardParams = b.prependIndirectResult(fn.Signature, false, forwardParams, "defer.result")
-			b.createInvokeWithAnalysis(fnType, llvmFn, forwardParams, "", b.functionMayUnwind(fn), b.functionMaySuspend(fn))
-		case *ssa.Builtin:
-			db := b.deferBuiltinFuncs[callback]
-
-			//Get parameter types
-			valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
-
-			//Get signature from call results
-			params := callback.Type().Underlying().(*types.Signature).Params()
-			for v := range params.Variables() {
-				valueTypes = append(valueTypes, b.getLLVMType(v.Type()))
-			}
-
-			deferredCallType := b.ctx.StructType(valueTypes, false)
-
-			// Extract the params from the struct.
-			argValues := b.loadDeferredCallParams(deferredCallType, deferData)
-
-			_, err := b.createBuiltin(db.argTypes, argValues, db.callName, db.pos)
-			if err != nil {
-				b.diagnostics = append(b.diagnostics, err)
-			}
-		default:
-			panic("unknown deferred function type")
-		}
+		b.createDeferredCall(callback, deferData, nil)
 
 		if b.usesReturnUnwind() {
 			// A panic in a deferred call has reached its target frame. Keep
@@ -766,4 +661,305 @@ func (b *builder) createRunDefers() {
 	// End of loop.
 	b.SetInsertPointAtEnd(end)
 	b.runningDefers = false
+}
+
+// createDeferredCall emits the call for one deferred function. The parameters
+// are loaded from deferData unless stored is given.
+func (b *builder) createDeferredCall(callback any, deferData llvm.Value, stored []llvm.Value) {
+	switch callback := callback.(type) {
+	case *ssa.CallCommon:
+		// Call on an value or interface value.
+
+		// Get the real defer struct type and cast to it.
+		valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
+
+		if !callback.IsInvoke() {
+			//Expect funcValue to be passed through the deferred call.
+			valueTypes = append(valueTypes, b.getFuncType(callback.Signature()))
+		} else {
+			//Expect typecode
+			valueTypes = append(valueTypes, b.dataPtrType, b.dataPtrType)
+		}
+
+		var params []functionABIParam
+		if callback.IsInvoke() {
+			params = b.getInterfaceFunctionABI(callback.Signature()).params[1:]
+		} else {
+			params = b.getFunctionABI(callback.Signature(), false).params
+		}
+		valueTypes = b.appendStoredParamTypes(valueTypes, params)
+
+		// Extract the params from the struct (including receiver).
+		deferredCallType := b.ctx.StructType(valueTypes, false)
+		forwardParams := b.deferredCallParams(deferredCallType, deferData, stored)
+
+		var fnPtr llvm.Value
+		var fnType llvm.Type
+
+		if !callback.IsInvoke() {
+			// Isolate the func value.
+			funcValue := forwardParams[0]
+			forwardParams = forwardParams[1:]
+
+			//Get function pointer and context
+			var context llvm.Value
+			fnPtr, context = b.decodeFuncValue(funcValue)
+			fnType = b.getLLVMFunctionType(callback.Signature())
+
+			//Pass context
+			forwardParams = append(forwardParams, context)
+		} else {
+			// Move typecode from the start to the end of the list of
+			// parameters.
+			forwardParams = append(forwardParams[1:], forwardParams[0])
+			fnPtr = b.getInvokeFunction(callback)
+			fnType = fnPtr.GlobalValueType()
+
+			// Add the context parameter. An interface call cannot also be a
+			// closure but we have to supply the parameter anyway for platforms
+			// with a strict calling convention.
+			forwardParams = append(forwardParams, llvm.Undef(b.dataPtrType))
+		}
+		forwardParams = b.prependIndirectResult(callback.Signature(), false, forwardParams, "defer.result")
+
+		b.createInvokeWithAnalysis(fnType, fnPtr, forwardParams, "", true, true)
+
+	case *ssa.Function:
+		// Direct call.
+
+		// Get the real defer struct type and cast to it.
+		valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
+		exported := b.getFunctionInfo(callback).exported
+		abi := b.getFunctionABI(callback.Signature, exported)
+		valueTypes = b.appendStoredParamTypes(valueTypes, abi.params)
+		deferredCallType := b.ctx.StructType(valueTypes, false)
+
+		// Extract the params from the struct.
+		forwardParams := b.deferredCallParams(deferredCallType, deferData, stored)
+
+		// Plain TinyGo functions add some extra parameters to implement async functionality and function receivers.
+		// These parameters should not be supplied when calling into an external C/ASM function.
+		if !exported {
+			// Add the context parameter. We know it is ignored by the receiving
+			// function, but we have to pass one anyway.
+			forwardParams = append(forwardParams, llvm.Undef(b.dataPtrType))
+		}
+		forwardParams = b.prependIndirectResult(callback.Signature, exported, forwardParams, "defer.result")
+
+		// Call real function.
+		fnType, fn := b.getFunction(callback)
+		b.createInvokeWithAnalysis(fnType, fn, forwardParams, "", b.functionMayUnwind(callback), b.functionMaySuspend(callback))
+
+	case *ssa.MakeClosure:
+		// Get the real defer struct type and cast to it.
+		fn := callback.Fn.(*ssa.Function)
+		valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
+		abi := b.getFunctionABI(fn.Signature, false)
+		valueTypes = b.appendStoredParamTypes(valueTypes, abi.params)
+		valueTypes = append(valueTypes, b.dataPtrType) // closure
+		deferredCallType := b.ctx.StructType(valueTypes, false)
+
+		// Extract the params from the struct.
+		forwardParams := b.deferredCallParams(deferredCallType, deferData, stored)
+
+		// Call deferred function.
+		fnType, llvmFn := b.getFunction(fn)
+		forwardParams = b.prependIndirectResult(fn.Signature, false, forwardParams, "defer.result")
+		b.createInvokeWithAnalysis(fnType, llvmFn, forwardParams, "", b.functionMayUnwind(fn), b.functionMaySuspend(fn))
+	case *ssa.Builtin:
+		db := b.deferBuiltinFuncs[callback]
+
+		//Get parameter types
+		valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
+
+		//Get signature from call results
+		params := callback.Type().Underlying().(*types.Signature).Params()
+		for v := range params.Variables() {
+			valueTypes = append(valueTypes, b.getLLVMType(v.Type()))
+		}
+
+		deferredCallType := b.ctx.StructType(valueTypes, false)
+
+		// Extract the params from the struct.
+		argValues := b.deferredCallParams(deferredCallType, deferData, stored)
+
+		_, err := b.createBuiltin(db.argTypes, argValues, db.callName, db.pos)
+		if err != nil {
+			b.diagnostics = append(b.diagnostics, err)
+		}
+	default:
+		panic("unknown deferred function type")
+	}
+}
+
+func (b *builder) deferredCallParams(structType llvm.Type, ptr llvm.Value, params []llvm.Value) []llvm.Value {
+	if params != nil {
+		return slices.Clone(params)
+	}
+	return b.loadDeferredCallParams(structType, ptr)
+}
+
+// openDeferCall is a deferred call that is emitted directly at each return.
+type openDeferCall struct {
+	callback any
+	params   []llvm.Value
+}
+
+// canOpenCodeDefers reports whether the deferred calls of this function can be
+// emitted directly at each return, without a defer frame. This is the case
+// when every defer runs at most once, it is known at each return which
+// defers have run, and nothing can panic while a deferred call is pending.
+func (b *builder) canOpenCodeDefers() bool {
+	b.openDefers = b.openDefers[:0]
+	var exits []*ssa.BasicBlock
+	for _, block := range b.fn.DomPreorder() {
+		for _, instr := range block.Instrs {
+			switch instr := instr.(type) {
+			case *ssa.Defer:
+				b.openDefers = append(b.openDefers, instr)
+			case *ssa.RunDefers:
+				exits = append(exits, block)
+			}
+		}
+	}
+	for _, d := range b.openDefers {
+		fn := deferredFunction(&d.Call)
+		if fn == nil || callsRecover(fn) {
+			return false
+		}
+		if blockReaches(d.Block(), d.Block(), false) {
+			return false
+		}
+		for _, exit := range exits {
+			if !d.Block().Dominates(exit) && blockReaches(d.Block(), exit, true) {
+				return false
+			}
+		}
+		if b.mayUnwindAfter(d) {
+			return false
+		}
+	}
+	for _, exit := range exits {
+		active := b.activeDefers(exit)
+		for i := 1; i < len(active); i++ {
+			if b.functionMayUnwind(deferredFunction(&active[i].Call)) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// createOpenCodedRunDefers calls the deferred functions that are active at
+// this return, newest first.
+func (b *builder) createOpenCodedRunDefers(exit *ssa.BasicBlock) {
+	active := b.activeDefers(exit)
+	for i := len(active) - 1; i >= 0; i-- {
+		call := b.openDeferCalls[active[i]]
+		b.createDeferredCall(call.callback, llvm.Value{}, call.params)
+	}
+}
+
+// activeDefers returns the defers that have run when reaching this return, in
+// the order they were registered.
+func (b *builder) activeDefers(exit *ssa.BasicBlock) []*ssa.Defer {
+	var active []*ssa.Defer
+	for _, d := range b.openDefers {
+		if d.Block().Dominates(exit) {
+			active = append(active, d)
+		}
+	}
+	return active
+}
+
+// mayUnwindAfter reports whether anything between this defer and a return
+// may panic.
+func (b *builder) mayUnwindAfter(d *ssa.Defer) bool {
+	seen := map[*ssa.BasicBlock]bool{}
+	var visit func(block *ssa.BasicBlock, start int) bool
+	visit = func(block *ssa.BasicBlock, start int) bool {
+		for _, instr := range block.Instrs[start:] {
+			if _, ok := instr.(*ssa.RunDefers); ok {
+				return false
+			}
+			if b.instructionMayUnwind(instr) {
+				return true
+			}
+		}
+		for _, succ := range block.Succs {
+			if !seen[succ] {
+				seen[succ] = true
+				if visit(succ, 0) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	start := slices.Index(d.Block().Instrs, ssa.Instruction(d)) + 1
+	return visit(d.Block(), start)
+}
+
+func (b *builder) instructionMayUnwind(instr ssa.Instruction) bool {
+	switch instr := instr.(type) {
+	case *ssa.Defer, *ssa.Go:
+		return false
+	case *ssa.Call:
+		if builtin, ok := instr.Call.Value.(*ssa.Builtin); ok {
+			switch builtin.Name() {
+			case "close", "delete", "panic":
+				return true
+			}
+			return false
+		}
+		return b.callPropertiesFor(&instr.Call)&callMayUnwind != 0
+	}
+	return instructionCallProperties(instr)&callMayUnwind != 0
+}
+
+// deferredFunction returns the function called by a deferred call that is a
+// direct function or closure call, or nil otherwise.
+func deferredFunction(call *ssa.CallCommon) *ssa.Function {
+	switch value := call.Value.(type) {
+	case *ssa.Function:
+		return value
+	case *ssa.MakeClosure:
+		return value.Fn.(*ssa.Function)
+	}
+	return nil
+}
+
+func callsRecover(fn *ssa.Function) bool {
+	for _, block := range fn.Blocks {
+		for _, instr := range block.Instrs {
+			if call, ok := instr.(*ssa.Call); ok {
+				if builtin, ok := call.Call.Value.(*ssa.Builtin); ok && builtin.Name() == "recover" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// blockReaches reports whether to can be reached from from. The from block
+// itself only counts when self is set.
+func blockReaches(from, to *ssa.BasicBlock, self bool) bool {
+	if self && from == to {
+		return true
+	}
+	seen := map[*ssa.BasicBlock]bool{}
+	stack := slices.Clone(from.Succs)
+	for len(stack) > 0 {
+		block := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if block == to {
+			return true
+		}
+		if !seen[block] {
+			seen[block] = true
+			stack = append(stack, block.Succs...)
+		}
+	}
+	return false
 }
