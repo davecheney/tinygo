@@ -87,6 +87,9 @@ func TestBinarySize(t *testing.T) {
 		{target: "pico2", path: "./testdata/size-os", opt: "z"},
 		{target: "pico2", path: "./testdata/size-os", opt: "2"},
 
+		{target: "cortex-m-qemu", path: "./testdata/size-mathrand", opt: "z"},
+		{target: "cortex-m-qemu", path: "./testdata/size-mathrand", opt: "2"},
+
 		{target: "cortex-m-qemu", path: "./testdata/size-corpus", opt: "z"},
 		{target: "cortex-m-qemu", path: "./testdata/size-corpus", opt: "2"},
 		{target: "riscv-qemu", path: "./testdata/size-corpus", opt: "z"},
