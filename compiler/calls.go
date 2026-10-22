@@ -465,9 +465,19 @@ func instructionCallProperties(instruction ssa.Instruction) callProperties {
 		return callMaySuspend
 	case *ssa.Select:
 		return callMaySuspend | callMayUnwind
-	case *ssa.FieldAddr, *ssa.Index, *ssa.IndexAddr, *ssa.Lookup,
+	case *ssa.FieldAddr:
+		if pointerNeverNil(instruction.X) {
+			return 0
+		}
+		return callMayUnwind
+	case *ssa.Store:
+		if pointerNeverNil(instruction.Addr) {
+			return 0
+		}
+		return callMayUnwind
+	case *ssa.Index, *ssa.IndexAddr, *ssa.Lookup,
 		*ssa.MakeChan, *ssa.MakeSlice, *ssa.MapUpdate, *ssa.Panic,
-		*ssa.Slice, *ssa.SliceToArrayPointer, *ssa.Store, *ssa.TypeAssert:
+		*ssa.Slice, *ssa.SliceToArrayPointer, *ssa.TypeAssert:
 		return callMayUnwind
 	case *ssa.BinOp:
 		if binOpMayUnwind(instruction) {
@@ -479,7 +489,7 @@ func instructionCallProperties(instruction ssa.Instruction) callProperties {
 		if instruction.Op == token.ARROW {
 			properties |= callMaySuspend
 		}
-		if instruction.Op == token.MUL {
+		if instruction.Op == token.MUL && !pointerNeverNil(instruction.X) {
 			properties |= callMayUnwind
 		}
 		return properties
