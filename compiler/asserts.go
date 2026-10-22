@@ -158,37 +158,42 @@ func (b *builder) createChanBoundsCheck(elementSize uint64, bufSize llvm.Value, 
 	b.createRuntimeAssert(bufSizeTooBig, "chan", "chanMakePanic")
 }
 
-// createNilCheck checks whether the given pointer is nil, and panics if it is.
-// It has no effect in well-behaved programs, but makes sure no uncaught nil
-// pointer dereferences exist in valid Go code.
-func (b *builder) createNilCheck(inst ssa.Value, ptr llvm.Value, blockPrefix string) {
-	// Check whether we need to emit this check at all.
-	if !ptr.IsAGlobalValue().IsNil() {
-		return
-	}
-
+// pointerNeverNil reports whether a pointer needs no nil check, either because
+// it cannot be nil or because it comes from unsafe code.
+func pointerNeverNil(inst ssa.Value) bool {
 	switch inst := inst.(type) {
+	case *ssa.Global:
+		return true
 	case *ssa.Alloc:
 		// An alloc is never nil.
-		return
+		return true
 	case *ssa.FreeVar:
 		// A free variable is allocated in a parent function and is thus never
 		// nil.
-		return
+		return true
 	case *ssa.IndexAddr:
 		// This pointer is the result of an index operation into a slice or
 		// array. Such slices/arrays are already bounds checked so the pointer
 		// must be a valid (non-nil) pointer. No nil checking is necessary.
-		return
+		return true
 	case *ssa.Convert:
 		// This is a pointer that comes from a conversion from unsafe.Pointer.
 		// Don't do nil checking because this is unsafe code and the code should
 		// know what it is doing.
 		// Note: all *ssa.Convert instructions that result in a pointer must
 		// come from unsafe.Pointer. Testing here for unsafe.Pointer to be sure.
-		if inst.X.Type() == types.Typ[types.UnsafePointer] {
-			return
-		}
+		return inst.X.Type() == types.Typ[types.UnsafePointer]
+	}
+	return false
+}
+
+// createNilCheck checks whether the given pointer is nil, and panics if it is.
+// It has no effect in well-behaved programs, but makes sure no uncaught nil
+// pointer dereferences exist in valid Go code.
+func (b *builder) createNilCheck(inst ssa.Value, ptr llvm.Value, blockPrefix string) {
+	// Check whether we need to emit this check at all.
+	if !ptr.IsAGlobalValue().IsNil() || pointerNeverNil(inst) {
+		return
 	}
 
 	// Compare against nil.
