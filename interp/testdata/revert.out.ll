@@ -46,15 +46,21 @@ entry:
   %y = load volatile i32, ptr @x.volatileNum, align 4
   store volatile i32 %y, ptr @x.volatileNum, align 4
   call void @modifyAtomic(ptr @atomic.value)
-  %runtimeOld = call i32 @"sync/atomic.SwapUint32"(ptr @atomic.value, i32 15, ptr undef)
-  store i32 %runtimeOld, ptr @atomic.runtimeOld, align 4
-  %runtimeSuccess = call i1 @"sync/atomic.CompareAndSwapUint32"(ptr @atomic.value, i32 15, i32 17, ptr undef)
-  store i1 %runtimeSuccess, ptr @atomic.runtimeSuccess, align 1
+  %old = atomicrmw xchg ptr @atomic.value, i32 15 syncscope("singlethread") seq_cst, align 4
+  store i32 %old, ptr @atomic.runtimeOld, align 4
+  %pair = cmpxchg ptr @atomic.value, i32 15, i32 17 syncscope("singlethread") seq_cst seq_cst, align 4
+  %swapped = extractvalue { i32, i1 } %pair, 1
+  store i1 %swapped, ptr @atomic.runtimeSuccess, align 1
   %runtimeSeen = load atomic i32, ptr @atomic.value seq_cst, align 4
   store i32 %runtimeSeen, ptr @atomic.runtimeSeen, align 4
   store atomic i32 19, ptr @atomic.value seq_cst, align 4
   call fastcc void @y.init(ptr undef)
-  call fastcc void @z.set(ptr @z.bloom, ptr @z.bloom)
+  %hash = call i64 @ptrHash(ptr @z.bloom)
+  %index = lshr i64 %hash, 58
+  %bit = shl i64 1, %index
+  %old1 = load i64, ptr @z.bloom, align 8
+  %new = or i64 %old1, %bit
+  store i64 %new, ptr @z.bloom, align 8
   call fastcc void @z.setArr(ptr @z.arr, i64 32, ptr @z.bloom)
   ret void
 }
