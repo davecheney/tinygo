@@ -26,3 +26,9 @@ phi escape: 48
 phi nil: true
 interface return: 49
 deep forward: 50
+open unlock: 5 true
+open named result: 42
+open early return: 1 2
+open panic before: true
+open panic in defer: 60
+open log: 3 2 1 20 10 30 41 40 41 71

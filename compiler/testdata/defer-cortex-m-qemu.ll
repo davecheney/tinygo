@@ -98,7 +98,7 @@ rundefers.end1:                                   ; preds = %rundefers.loophead4
   br label %recover
 }
 
-; Function Attrs: nocallback nofree nosync nounwind willreturn
+; Function Attrs: nocallback nofree nounwind willreturn
 declare ptr @llvm.stacksave.p0() #2
 
 declare void @runtime.setupDeferFrame(ptr dereferenceable_or_null(28), ptr, ptr) #1
@@ -132,72 +132,12 @@ entry:
 ; Function Attrs: nounwind
 define hidden void @main.deferNoPanicCall(ptr %context) unnamed_addr #0 {
 entry:
-  %defer.alloca = alloca { i32, ptr }, align 4
-  %deferframe.buf = alloca %runtime.deferFrame, align 4
-  %deferPtr = getelementptr inbounds nuw i8, ptr %deferframe.buf, i32 24
-  %0 = call ptr @llvm.stacksave.p0()
-  call void @runtime.setupDeferFrame(ptr nonnull %deferframe.buf, ptr %0, ptr undef) #4
-  %defer.next = load ptr, ptr %deferPtr, align 4
-  store i32 0, ptr %defer.alloca, align 4
-  %defer.alloca.repack11 = getelementptr inbounds nuw i8, ptr %defer.alloca, i32 4
-  store ptr %defer.next, ptr %defer.alloca.repack11, align 4
-  store ptr %defer.alloca, ptr %deferPtr, align 4
   call void @main.noPanicCall(ptr undef)
-  br label %rundefers.block
-
-rundefers.after:                                  ; preds = %rundefers.end
-  call void @runtime.destroyDeferFrame(ptr nonnull %deferframe.buf, ptr undef) #4
-  ret void
-
-rundefers.block:                                  ; preds = %entry
-  br label %rundefers.loophead
-
-rundefers.loophead:                               ; preds = %rundefers.callback0, %rundefers.block
-  %1 = load ptr, ptr %deferPtr, align 4
-  %stackIsNil = icmp eq ptr %1, null
-  br i1 %stackIsNil, label %rundefers.end, label %rundefers.loop
-
-rundefers.loop:                                   ; preds = %rundefers.loophead
-  %stack.next.gep = getelementptr inbounds nuw i8, ptr %1, i32 4
-  %stack.next = load ptr, ptr %stack.next.gep, align 4
-  store ptr %stack.next, ptr %deferPtr, align 4
-  %callback = load i32, ptr %1, align 4
-  switch i32 %callback, label %rundefers.default [
-    i32 0, label %rundefers.callback0
-  ]
-
-rundefers.callback0:                              ; preds = %rundefers.loop
   call void @"main.deferNoPanicCall$1"(ptr undef)
-  br label %rundefers.loophead
-
-rundefers.default:                                ; preds = %rundefers.loop
-  unreachable
-
-rundefers.end:                                    ; preds = %rundefers.loophead
-  br label %rundefers.after
-
-recover:                                          ; preds = %rundefers.end1
   ret void
 
-lpad:                                             ; No predecessors!
-  br label %rundefers.loophead4
-
-rundefers.loophead4:                              ; preds = %rundefers.callback010, %lpad
-  br i1 poison, label %rundefers.end1, label %rundefers.loop3
-
-rundefers.loop3:                                  ; preds = %rundefers.loophead4
-  switch i32 poison, label %rundefers.default2 [
-    i32 0, label %rundefers.callback010
-  ]
-
-rundefers.callback010:                            ; preds = %rundefers.loop3
-  br label %rundefers.loophead4
-
-rundefers.default2:                               ; preds = %rundefers.loop3
-  unreachable
-
-rundefers.end1:                                   ; preds = %rundefers.loophead4
-  br label %recover
+recover:                                          ; No predecessors!
+  ret void
 }
 
 ; Function Attrs: nounwind
@@ -563,7 +503,7 @@ rundefers.end4:                                   ; preds = %rundefers.loophead7
 
 attributes #0 = { nounwind "target-features"="+armv7-m,+hwdiv,+soft-float,+thumb-mode,-aes,-bf16,-cdecp0,-cdecp1,-cdecp2,-cdecp3,-cdecp4,-cdecp5,-cdecp6,-cdecp7,-crc,-crypto,-d32,-dotprod,-dsp,-fp-armv8,-fp-armv8d16,-fp-armv8d16sp,-fp-armv8sp,-fp16,-fp16fml,-fp64,-fpregs,-fullfp16,-hwdiv-arm,-i8mm,-lob,-mve,-mve.fp,-neon,-pacbti,-ras,-sb,-sha2,-vfp2,-vfp2sp,-vfp3,-vfp3d16,-vfp3d16sp,-vfp3sp,-vfp4,-vfp4d16,-vfp4d16sp,-vfp4sp" }
 attributes #1 = { "target-features"="+armv7-m,+hwdiv,+soft-float,+thumb-mode,-aes,-bf16,-cdecp0,-cdecp1,-cdecp2,-cdecp3,-cdecp4,-cdecp5,-cdecp6,-cdecp7,-crc,-crypto,-d32,-dotprod,-dsp,-fp-armv8,-fp-armv8d16,-fp-armv8d16sp,-fp-armv8sp,-fp16,-fp16fml,-fp64,-fpregs,-fullfp16,-hwdiv-arm,-i8mm,-lob,-mve,-mve.fp,-neon,-pacbti,-ras,-sb,-sha2,-vfp2,-vfp2sp,-vfp3,-vfp3d16,-vfp3d16sp,-vfp3sp,-vfp4,-vfp4d16,-vfp4d16sp,-vfp4sp" }
-attributes #2 = { nocallback nofree nosync nounwind willreturn }
+attributes #2 = { nocallback nofree nounwind willreturn }
 attributes #3 = { allockind("alloc,zeroed") allocsize(0) "alloc-family"="runtime.alloc" "target-features"="+armv7-m,+hwdiv,+soft-float,+thumb-mode,-aes,-bf16,-cdecp0,-cdecp1,-cdecp2,-cdecp3,-cdecp4,-cdecp5,-cdecp6,-cdecp7,-crc,-crypto,-d32,-dotprod,-dsp,-fp-armv8,-fp-armv8d16,-fp-armv8d16sp,-fp-armv8sp,-fp16,-fp16fml,-fp64,-fpregs,-fullfp16,-hwdiv-arm,-i8mm,-lob,-mve,-mve.fp,-neon,-pacbti,-ras,-sb,-sha2,-vfp2,-vfp2sp,-vfp3,-vfp3d16,-vfp3d16sp,-vfp3sp,-vfp4,-vfp4d16,-vfp4d16sp,-vfp4sp" }
 attributes #4 = { nounwind }
 attributes #5 = { nounwind returns_twice }

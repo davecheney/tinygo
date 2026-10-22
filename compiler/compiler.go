@@ -200,6 +200,9 @@ type builder struct {
 	deferExprFuncs     map[ssa.Value]int
 	selectRecvBuf      map[*ssa.Select]llvm.Value
 	deferBuiltinFuncs  map[ssa.Value]deferBuiltin
+	openCodedDefers    bool
+	openDefers         []*ssa.Defer
+	openDeferCalls     map[*ssa.Defer]openDeferCall
 	runningDefers      bool
 	loweringBody       bool
 	inFaultBlock       bool
@@ -1628,6 +1631,10 @@ func (b *builder) createInstruction(instr ssa.Instruction) {
 		}
 		b.createReturn(instr.Results, getPos(instr))
 	case *ssa.RunDefers:
+		if b.openCodedDefers {
+			b.createOpenCodedRunDefers(instr.Block())
+			break
+		}
 		// Note where we're going to put the rundefers block
 		run := b.insertBasicBlock("rundefers.block")
 		b.CreateBr(run)
