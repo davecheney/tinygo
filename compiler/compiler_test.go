@@ -101,7 +101,9 @@ func TestCompiler(t *testing.T) {
 				t.Error(err)
 			}
 
-			// Optimize IR a little.
+			// Optimize IR a little. Range attributes only exist from LLVM 19,
+			// so remove them to keep the golden files the same for all versions.
+			removeRangeAttributes(mod)
 			passOptions := llvm.NewPassBuilderOptions()
 			defer passOptions.Dispose()
 			err = mod.RunPasses("instcombine", llvm.TargetMachine{}, passOptions)
@@ -834,6 +836,51 @@ func TestAggregateValueCount(t *testing.T) {
 }
 
 // Build a package given a number of compiler options and a file.
+func removeRangeAttributes(mod llvm.Module) {
+	kind := llvm.AttributeKindID("range")
+	if kind == 0 {
+		return
+	}
+	for fn := mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
+		for i := 0; i <= fn.ParamsCount(); i++ {
+			fn.RemoveEnumAttributeAtIndex(i, kind)
+		}
+	}
+}
+
+// Test that slice and string lengths are marked as never negative, which only
+// LLVM 19 and later can express.
+func TestLengthRangeAttribute(t *testing.T) {
+	mod, errs := testCompilePackage(t, &compileopts.Options{Target: "wasm"}, "lenrange.go")
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	defer mod.Dispose()
+
+	hasRange := llvmutil.Version() >= 19
+	for _, tc := range []struct {
+		fn    string
+		param string
+		want  bool
+	}{
+		{"main.sliceArgs", "%s.len", true},
+		{"main.sliceArgs", "%s.cap", true},
+		{"main.sliceArgs", "%s.data", false},
+		{"main.stringArg", "%s.len", true},
+		{"main.plainInt", "%n", false},
+	} {
+		fn := mod.NamedFunction(tc.fn)
+		if fn.IsNil() {
+			t.Fatalf("missing function %s", tc.fn)
+		}
+		header, _, _ := strings.Cut(fn.String(), "{")
+		got := strings.Contains(header, "i32 range(i32 0, -2147483648) "+tc.param+",")
+		if want := tc.want && hasRange; got != want {
+			t.Errorf("%s %s: range attribute present = %v, want %v\n%s", tc.fn, tc.param, got, want, header)
+		}
+	}
+}
+
 func testCompilePackage(t *testing.T, options *compileopts.Options, file string) (llvm.Module, []error) {
 	return testCompilePackageWithDebug(t, options, file, false)
 }
