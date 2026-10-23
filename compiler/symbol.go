@@ -169,7 +169,10 @@ func (c *compilerContext) getFunction(fn *ssa.Function) (llvm.Type, llvm.Value) 
 			// Lengths are never negative, so they are in [0, 1<<(bits-1)).
 			bits := uint(paramInfo.llvmType.IntTypeWidth())
 			nonNegative := c.ctx.CreateConstantRangeAttribute(llvm.AttributeKindID("range"), bits, []uint64{0}, []uint64{1 << (bits - 1)})
-			llvmFn.AddAttributeAtIndex(i+1, nonNegative)
+			if !nonNegative.IsNil() {
+				// The attribute is nil before LLVM 19.
+				llvmFn.AddAttributeAtIndex(i+1, nonNegative)
+			}
 		}
 	}
 
