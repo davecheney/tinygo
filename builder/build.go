@@ -956,10 +956,9 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (BuildRe
 				ldflags = append(ldflags,
 					"-mllvm", "-code-model="+config.CodeModel())
 			}
-			if sizeLevel >= 2 {
-				// Workaround with roughly the same effect as
-				// https://reviews.llvm.org/D119342.
-				// Can hopefully be removed in LLVM 19.
+			if sizeLevel >= 2 && llvmutil.Version() < 19 {
+				// LLVM 19 and later skip loop header duplication for minsize
+				// functions, see https://reviews.llvm.org/D119342.
 				ldflags = append(ldflags,
 					"-mllvm", "--rotation-max-header-size=0")
 			}
