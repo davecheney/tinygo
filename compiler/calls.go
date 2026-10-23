@@ -39,6 +39,10 @@ const (
 
 	// Whether this parameter is passed through backing storage.
 	paramIsIndirect
+
+	// Whether this is the length or capacity of a slice or string, which is
+	// never negative.
+	paramIsLength
 )
 
 // createRuntimeCallCommon creates a runtime call. Use createRuntimeCall or
@@ -702,6 +706,7 @@ func (c *compilerContext) flattenAggregateType(t llvm.Type, name string, goType 
 			}
 			suffix := strconv.Itoa(i)
 			isString := false
+			isLength := false
 			if goType != nil {
 				// Try to come up with a good suffix for this struct field,
 				// depending on which Go type it's based on.
@@ -710,6 +715,7 @@ func (c *compilerContext) flattenAggregateType(t llvm.Type, name string, goType 
 					suffix = []string{"typecode", "value"}[i]
 				case *types.Slice:
 					suffix = []string{"data", "len", "cap"}[i]
+					isLength = i != 0
 				case *types.Struct:
 					suffix = goType.Field(i).Name()
 				case *types.Basic:
@@ -719,6 +725,7 @@ func (c *compilerContext) flattenAggregateType(t llvm.Type, name string, goType 
 					case types.String:
 						suffix = []string{"data", "len"}[i]
 						isString = true
+						isLength = i != 0
 					}
 				case *types.Signature:
 					suffix = []string{"context", "funcptr"}[i]
@@ -727,6 +734,9 @@ func (c *compilerContext) flattenAggregateType(t llvm.Type, name string, goType 
 			subInfos := c.flattenAggregateType(subfield, name+"."+suffix, extractSubfield(goType, i))
 			if isString {
 				subInfos[0].flags |= paramIsReadonly
+			}
+			if isLength {
+				subInfos[0].flags |= paramIsLength
 			}
 			paramInfos = append(paramInfos, subInfos...)
 		}

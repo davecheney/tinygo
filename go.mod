@@ -56,3 +56,5 @@ tool (
 	github.com/mgechev/revive
 	go.bytecodealliance.org/cmd/wit-bindgen-go
 )
+
+replace tinygo.org/x/go-llvm => github.com/davecheney/go-llvm v0.0.0-20261023224700-6cde38e09fa8
