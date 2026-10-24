@@ -78,7 +78,7 @@ func (r *runner) compileFunction(llvmFn llvm.Value) *function {
 		params: llvmFn.Params(),
 		locals: make(map[llvm.Value]int),
 	}
-	if llvmFn.IsDeclaration() {
+	if llvmFn.IsDeclaration() || isInterposable(llvmFn.Linkage()) {
 		// Nothing to do.
 		return fn
 	}

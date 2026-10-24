@@ -182,3 +182,9 @@ __attribute__((noinline)) void clobberStack(void) {
 	}
 #endif
 }
+
+int weakValue = 2;
+
+int weakFunc(void) {
+	return 2;
+}

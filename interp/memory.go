@@ -46,6 +46,7 @@ type object struct {
 	size           uint32    // must match buffer.len(), if available
 	align          int       // alignment of the object (may be 0 if unknown)
 	constant       bool      // true if this is a constant global
+	noStore        bool      // true if the linker may keep a different definition
 	marked         uint8     // 0 means unmarked, 1 means external read, 2 means external write
 }
 
@@ -243,7 +244,7 @@ func (mv *memoryView) markExternal(llvmValue llvm.Value, mark uint8) error {
 // from the object or store to it without affecting the behavior of the program.
 func (mv *memoryView) hasExternalLoadOrStore(v pointerValue) bool {
 	obj := mv.get(v.index())
-	return obj.marked >= 1
+	return obj.marked >= 1 || obj.noStore
 }
 
 // hasExternalStore returns true if this object has an external store. If this
@@ -1272,7 +1273,9 @@ func (r *runner) getValue(llvmValue llvm.Value) value {
 			r.objects = append(r.objects, obj)
 			if !llvmValue.IsAGlobalVariable().IsNil() {
 				obj.size = uint32(r.targetData.TypeAllocSize(llvmValue.GlobalValueType()))
-				if initializer := llvmValue.Initializer(); !initializer.IsNil() {
+				linkage := llvmValue.Linkage()
+				obj.noStore = linkage == llvm.LinkOnceODRLinkage || linkage == llvm.WeakODRLinkage || linkage == llvm.AvailableExternallyLinkage
+				if initializer := llvmValue.Initializer(); !initializer.IsNil() && !isInterposable(linkage) {
 					// Treat the global as external if its initializer is only known at runtime.
 					buf := r.getValue(initializer)
 					if _, ok := buf.(localValue); !ok {
@@ -1441,4 +1444,14 @@ func reverseBytes(buf []byte) {
 		opp := len(buf) - 1 - i
 		buf[i], buf[opp] = buf[opp], buf[i]
 	}
+}
+
+// isInterposable reports whether the linker may replace this definition with a
+// different one. See https://llvm.org/docs/LangRef.html#linkage-types.
+func isInterposable(linkage llvm.Linkage) bool {
+	switch linkage {
+	case llvm.WeakAnyLinkage, llvm.LinkOnceAnyLinkage, llvm.CommonLinkage, llvm.ExternalWeakLinkage:
+		return true
+	}
+	return false
 }

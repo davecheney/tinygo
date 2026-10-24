@@ -67,6 +67,7 @@ func main() {
 	println("headerfunc:", C.headerfunc(5))
 	println("static headerfunc:", C.headerfunc_static(5))
 	headerfunc_2()
+	weakLinkage()
 
 	// equivalent types
 	var goInt8 int8 = 5

@@ -20,6 +20,8 @@ headerfunc: 6
 static headerfunc: 4
 static headerfunc 2: +4.000000e+000
 static headerfunc void: 3
+weak value: 2 7
+weak func: 2
 bool: true true
 float: +3.100000e+000
 double: +3.200000e+000
