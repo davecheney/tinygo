@@ -28,7 +28,11 @@ func (b *builder) isNoWrapIncrement(expr *ssa.BinOp) bool {
 	if _, ok := x.(*ssa.Const); ok {
 		return false
 	}
-	for _, ref := range *x.Referrers() {
+	refs := x.Referrers()
+	if refs == nil {
+		return false
+	}
+	for _, ref := range *refs {
 		if b.boundsCheckedBefore(ref, x, expr) || lessThanBefore(ref, x, expr) {
 			return true
 		}
@@ -109,3 +113,102 @@ func runsBefore(a ssa.Instruction, b ssa.Instruction) bool {
 	}
 	return false
 }
+
+// isProvenIndex returns whether index is known to be in bounds for coll (a
+// slice or string) at the instruction at: index is not negative, and a
+// comparison index < len(coll) on the same value of coll is true on every path
+// to at.
+func (b *builder) isProvenIndex(coll, index ssa.Value, at ssa.Instruction) bool {
+	if !b.nonNegative(index, map[ssa.Value]bool{}) {
+		return false
+	}
+	refs := index.Referrers()
+	if refs == nil {
+		return false
+	}
+	for _, ref := range *refs {
+		cmp, ok := ref.(*ssa.BinOp)
+		if !ok {
+			continue
+		}
+		if !(cmp.Op == token.LSS && cmp.X == index && isLenOf(cmp.Y, coll)) &&
+			!(cmp.Op == token.GTR && cmp.Y == index && isLenOf(cmp.X, coll)) {
+			continue
+		}
+		for _, use := range *cmp.Referrers() {
+			branch, ok := use.(*ssa.If)
+			if !ok {
+				continue
+			}
+			then := branch.Block().Succs[0]
+			if len(then.Preds) == 1 && then.Dominates(at.Block()) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isLenOf(v, coll ssa.Value) bool {
+	call, ok := v.(*ssa.Call)
+	if !ok {
+		return false
+	}
+	builtin, ok := call.Call.Value.(*ssa.Builtin)
+	return ok && builtin.Name() == "len" && len(call.Call.Args) == 1 && call.Call.Args[0] == coll
+}
+
+// nonNegative returns whether v is never negative. A phi that is already being
+// checked is assumed to be non-negative; this is sound because the result is
+// true only if every input of every phi is non-negative.
+func (b *builder) nonNegative(v ssa.Value, visiting map[ssa.Value]bool) bool {
+	switch v := v.(type) {
+	case *ssa.Const:
+		if v.Value == nil {
+			return true
+		}
+		basic, ok := v.Type().Underlying().(*types.Basic)
+		return ok && basic.Info()&types.IsInteger != 0 && v.Int64() >= 0
+	case *ssa.Call:
+		builtin, ok := v.Call.Value.(*ssa.Builtin)
+		return ok && (builtin.Name() == "len" || builtin.Name() == "cap")
+	case *ssa.Convert:
+		// A small unsigned value converted to a wider signed type.
+		from, ok1 := v.X.Type().Underlying().(*types.Basic)
+		to, ok2 := v.Type().Underlying().(*types.Basic)
+		if !ok1 || !ok2 {
+			return false
+		}
+		switch from.Kind() {
+		case types.Uint8:
+			return to.Kind() == types.Int16 || to.Kind() == types.Int32 || to.Kind() == types.Int64 || to.Kind() == types.Int
+		case types.Uint16:
+			return to.Kind() == types.Int32 || to.Kind() == types.Int64 || to.Kind() == types.Int
+		}
+		return false
+	case *ssa.BinOp:
+		if v.Op != token.ADD || !b.isNoWrapIncrement(v) {
+			return false
+		}
+		x := v.X
+		if isConstOne(x) {
+			x = v.Y
+		}
+		return b.nonNegative(x, visiting)
+	case *ssa.Phi:
+		if visiting[v] {
+			return true
+		}
+		visiting[v] = true
+		for _, edge := range v.Edges {
+			if !b.nonNegative(edge, visiting) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// emitNoWrap enables nsw on x + 1 when it cannot overflow (step 1).
+const emitNoWrap = false

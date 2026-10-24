@@ -2628,7 +2628,7 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 			// unsigned bounds check of the element, which LLVM then removes.
 			return b.CreateICmp(llvm.IntULT, x, y, ""), nil
 		}
-		if b.isNoWrapIncrement(expr) {
+		if emitNoWrap && b.isNoWrapIncrement(expr) {
 			// x + 1 cannot overflow here, so tell the optimizer.
 			return b.CreateNSWAdd(x, y, ""), nil
 		}
@@ -2742,7 +2742,9 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 
 			// Bounds check.
 			length := b.CreateExtractValue(collection, 1, "len")
-			b.createLookupBoundsCheck(length, index)
+			if !b.info.nobounds && !b.isProvenIndex(expr.X, expr.Index, expr) {
+				b.createLookupBoundsCheck(length, index)
+			}
 
 			// Lookup byte
 			buf := b.CreateExtractValue(collection, 0, "")
@@ -2808,7 +2810,9 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 		index = b.extendInteger(index, expr.Index.Type(), b.uintptrType)
 
 		// Bounds check.
-		b.createLookupBoundsCheck(buflen, index)
+		if _, isSlice := expr.X.Type().Underlying().(*types.Slice); !isSlice || !b.isProvenIndex(expr.X, expr.Index, expr) {
+			b.createLookupBoundsCheck(buflen, index)
+		}
 
 		switch expr.X.Type().Underlying().(type) {
 		case *types.Pointer:
