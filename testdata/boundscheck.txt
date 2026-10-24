@@ -1,0 +1,10 @@
+rangeLoop: 1180
+countedLoop: 1180
+whileLoop: 2
+twoLoops: 10
+empty: 0 0 0 0
+negativeStart panicked
+otherSlice panicked
+signedConvert panicked
+shortened panicked
+lessOrEqual panicked

@@ -209,6 +209,3 @@ func (b *builder) nonNegative(v ssa.Value, visiting map[ssa.Value]bool) bool {
 	}
 	return false
 }
-
-// emitNoWrap enables nsw on x + 1 when it cannot overflow (step 1).
-const emitNoWrap = false
