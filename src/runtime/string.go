@@ -20,7 +20,7 @@ type stringIterator struct {
 
 // Return true iff the strings match.
 //
-//go:nobounds
+//go:nopanic index,slice,chan,shift,divide
 func stringEqual(x, y string) bool {
 	if len(x) != len(y) {
 		return false
@@ -35,7 +35,7 @@ func stringEqual(x, y string) bool {
 
 // Return true iff x < y.
 //
-//go:nobounds
+//go:nopanic index,slice,chan,shift,divide
 func stringLess(x, y string) bool {
 	l := len(x)
 	if m := len(y); m < l {
@@ -187,7 +187,7 @@ func encodeUTF8(r rune) ([4]byte, uintptr) {
 
 // Decode a single UTF-8 character from a string.
 //
-//go:nobounds
+//go:nopanic index,slice,chan,shift,divide
 func decodeUTF8(s string, index uintptr) (rune, uintptr) {
 	remaining := uintptr(len(s)) - index // must be >= 1 before calling this function
 	x := s[index]

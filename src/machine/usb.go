@@ -340,7 +340,7 @@ func sendDescriptorData(data []byte, maxLen uint16) {
 // Set the cap of the slice to the length.
 // This is safe, but cannot be proven by the compiler.
 //
-//go:nobounds
+//go:nopanic index,slice,chan,shift,divide
 func lenToCap(b []byte) []byte {
 	return b[:len(b):len(b)]
 }

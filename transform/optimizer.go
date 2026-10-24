@@ -207,6 +207,12 @@ func Optimize(mod llvm.Module, config *compileopts.Config) []error {
 		}
 	}
 
+	if config.Options.CheckNoPanic {
+		if errs := CheckNoPanic(mod); len(errs) != 0 {
+			return errs
+		}
+	}
+
 	return nil
 }
 

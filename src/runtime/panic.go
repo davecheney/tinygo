@@ -246,6 +246,14 @@ func nilMapPanic() {
 	runtimePanicAt(returnAddress(0), errNilMap)
 }
 
+// Stop the program when a check fails in a //go:nopanic function. It does not
+// print or unwind, so it is safe on the print and panic path.
+//
+//go:noinline
+func nopanicTrap() {
+	abort()
+}
+
 // Panic when trying to access an array or slice out of bounds.
 func lookupPanic() {
 	runtimePanicAt(returnAddress(0), errIndexOutOfRange)

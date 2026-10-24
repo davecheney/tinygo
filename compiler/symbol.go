@@ -34,6 +34,7 @@ type functionInfo struct {
 	exported      bool       // go:export, CGo
 	interrupt     bool       // go:interrupt
 	nobounds      bool       // go:nobounds
+	nopanic       panicKinds // go:nopanic
 	noescape      bool       // go:noescape
 	noheap        bool       // go:noheap
 	noruntime     bool       // go:noruntime
@@ -560,6 +561,18 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 			if c.checkDefinition(hasBody, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
 				info.nobounds = true
 			}
+		case "//go:nopanic":
+			// Checks of the given kinds in this function must be proven by the
+			// compiler. A check that is not proven calls runtime.nopanicTrap.
+			if !c.checkDefinition(hasBody, comment, pragma) {
+				continue
+			}
+			kinds, err := parsePanicKinds(parts[1:])
+			if err != nil {
+				c.addPragmaError(comment, err.Error())
+				continue
+			}
+			info.nopanic = kinds
 		case "//go:noescape":
 			// Don't let pointer parameters escape.
 			// Following the upstream Go implementation, we only do this for

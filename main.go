@@ -1801,6 +1801,7 @@ func main() {
 	parallelism := flag.Int("p", runtime.GOMAXPROCS(0), "the number of build jobs that can run in parallel")
 	nodebug := flag.Bool("no-debug", false, "strip debug information")
 	nobounds := flag.Bool("nobounds", false, "do not emit bounds checks")
+	checkNoPanic := flag.Bool("check-nopanic", false, "report checks in //go:nopanic functions that the compiler did not prove")
 	ocdCommandsString := flag.String("ocd-commands", "", "OpenOCD commands, overriding target spec (can specify multiple separated by commas)")
 	ocdOutput := flag.Bool("ocd-output", false, "print OCD daemon output during debug")
 	port := flag.String("port", "", "flash port (can specify multiple candidates separated by commas)")
@@ -1939,6 +1940,7 @@ func main() {
 		Semaphore:               make(chan struct{}, *parallelism),
 		Debug:                   !*nodebug,
 		Nobounds:                *nobounds,
+		CheckNoPanic:            *checkNoPanic,
 		PrintSizes:              *printSize,
 		PrintStacks:             *printStacks,
 		PrintAllocs:             printAllocs,

@@ -263,6 +263,13 @@ func (b *builder) getRuntimeAssertBlock(blockPrefix, assertFunc string) llvm.Bas
 	block := b.ctx.AddBasicBlock(b.llvmFn, blockPrefix+".throw")
 	b.runtimeAssertBlocks[assertFunc] = block
 	b.SetInsertPointAtEnd(block)
+	if kind := panicKindOf[assertFunc]; b.info.nopanic&kind != 0 {
+		// The check must be proven, so it must not reach the panic code.
+		b.createRuntimeCall("nopanicTrap", nil, "")
+		b.CreateUnreachable()
+		b.SetInsertPointAtEnd(savedBlock)
+		return block
+	}
 	b.inFaultBlock = true
 	if b.hasDeferFrame() {
 		b.createFaultCheckpoint()

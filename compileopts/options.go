@@ -50,6 +50,7 @@ type Options struct {
 	Semaphore               chan struct{}                    `json:"-"` // -p flag controls cap
 	Debug                   bool
 	Nobounds                bool
+	CheckNoPanic            bool // report checks in //go:nopanic functions that are not proven
 	PrintSizes              string
 	PrintAllocs             *regexp.Regexp // regexp string
 	PrintAllocsCover        bool           // emit allocs in go coverage tool format
