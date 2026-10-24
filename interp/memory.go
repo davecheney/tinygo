@@ -1074,24 +1074,26 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 			index := llvmValue.Operand(1)
 			numOperands := llvmValue.OperandsCount()
 			elementType := llvmValue.GEPSourceElementType()
-			totalOffset := r.targetData.TypeAllocSize(elementType) * index.ZExtValue()
+			// GEP indices are signed.
+			// https://llvm.org/docs/LangRef.html#getelementptr-instruction
+			totalOffset := int64(r.targetData.TypeAllocSize(elementType)) * index.SExtValue()
 			for i := 2; i < numOperands; i++ {
 				indexValue := llvmValue.Operand(i)
 				if checks && indexValue.IsAConstantInt().IsNil() {
 					panic("expected const gep index to be a constant integer")
 				}
-				index := indexValue.ZExtValue()
+				index := indexValue.SExtValue()
 				switch elementType.TypeKind() {
 				case llvm.StructTypeKind:
 					// Indexing into a struct field.
 					offsetInBytes := r.targetData.ElementOffset(elementType, int(index))
-					totalOffset += offsetInBytes
+					totalOffset += int64(offsetInBytes)
 					elementType = elementType.StructElementTypes()[index]
 				default:
 					// Indexing into an array.
 					elementType = elementType.ElementType()
 					elementSize := r.targetData.TypeAllocSize(elementType)
-					totalOffset += index * elementSize
+					totalOffset += index * int64(elementSize)
 				}
 			}
 			ptrSize := r.pointerSize
@@ -1099,7 +1101,12 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 			if err != nil {
 				panic(err)
 			}
-			ptrValue.pointer += totalOffset
+			result := pointerValue{ptrValue.pointer + uint64(totalOffset)}
+			if result.index() != ptrValue.index() {
+				// The offset leaves the object, so leave it for runtime.
+				return false
+			}
+			ptrValue = result
 			for i := range ptrSize {
 				v.buf[i] = ptrValue.pointer
 			}
