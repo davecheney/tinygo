@@ -922,11 +922,14 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			default:
 				panic("unknown float type")
 			}
+			// Ordered predicates are false and unordered predicates are true if
+			// either operand is NaN. See https://llvm.org/docs/LangRef.html#fcmp-instruction
+			unordered := math.IsNaN(lhs) || math.IsNaN(rhs)
 			switch predicate {
+			case llvm.FloatPredicateFalse:
+				result = false
 			case llvm.FloatOEQ:
 				result = lhs == rhs
-			case llvm.FloatUNE:
-				result = lhs != rhs
 			case llvm.FloatOGT:
 				result = lhs > rhs
 			case llvm.FloatOGE:
@@ -935,8 +938,28 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 				result = lhs < rhs
 			case llvm.FloatOLE:
 				result = lhs <= rhs
+			case llvm.FloatONE:
+				result = !unordered && lhs != rhs
+			case llvm.FloatORD:
+				result = !unordered
+			case llvm.FloatUEQ:
+				result = unordered || lhs == rhs
+			case llvm.FloatUGT:
+				result = unordered || lhs > rhs
+			case llvm.FloatUGE:
+				result = unordered || lhs >= rhs
+			case llvm.FloatULT:
+				result = unordered || lhs < rhs
+			case llvm.FloatULE:
+				result = unordered || lhs <= rhs
+			case llvm.FloatUNE:
+				result = lhs != rhs
+			case llvm.FloatUNO:
+				result = unordered
+			case llvm.FloatPredicateTrue:
+				result = true
 			default:
-				return nil, mem, r.errorAt(inst, errors.New("interp: unsupported fcmp"))
+				return nil, mem, r.errorAt(inst, errUnsupportedInst)
 			}
 			if result {
 				locals[inst.localIndex] = literalValue{uint8(1)}
