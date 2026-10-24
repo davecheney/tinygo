@@ -886,6 +886,10 @@ func runPlatTests(options compileopts.Options, tests []string, t *testing.T) {
 		t.Parallel()
 		runTest("recover.go", options, t, nil, nil)
 	})
+	t.Run("boundscheck.go", func(t *testing.T) {
+		t.Parallel()
+		runTest("boundscheck.go", options, t, nil, nil)
+	})
 	if isWebAssembly {
 		t.Run("recover-explicit.go", func(t *testing.T) {
 			t.Parallel()

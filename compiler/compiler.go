@@ -2628,10 +2628,6 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 			// unsigned bounds check of the element, which LLVM then removes.
 			return b.CreateICmp(llvm.IntULT, x, y, ""), nil
 		}
-		if emitNoWrap && b.isNoWrapIncrement(expr) {
-			// x + 1 cannot overflow here, so tell the optimizer.
-			return b.CreateNSWAdd(x, y, ""), nil
-		}
 		return b.createBinOp(expr.Op, expr.X.Type(), expr.Y.Type(), x, y, expr.Pos())
 	case *ssa.Call:
 		return b.createFunctionCall(expr.Common())
