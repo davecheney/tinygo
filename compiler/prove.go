@@ -119,10 +119,80 @@ func runsBefore(a ssa.Instruction, b ssa.Instruction) bool {
 // comparison index < len(coll) on the same value of coll is true on every path
 // to at.
 func (b *builder) isProvenIndex(coll, index ssa.Value, at ssa.Instruction) bool {
-	if !b.nonNegative(index, map[ssa.Value]bool{}) {
-		return false
+	return b.isProvenBelowLen(coll, index, at, false)
+}
+
+// isProvenSliceLow returns whether low in coll[low:] is known to be in bounds:
+// low is not negative and low <= len(coll) on every path to at.
+func (b *builder) isProvenSliceLow(coll, low ssa.Value, at ssa.Instruction) bool {
+	if b.isProvenBelowLen(coll, low, at, true) {
+		return true
 	}
-	refs := index.Referrers()
+	return b.nonNegative(low, map[ssa.Value]bool{}) && atMostLen(coll, low, map[ssa.Value]bool{})
+}
+
+// atMostLen returns whether v <= len(coll) always holds, for example for an
+// index that a loop increments while it is smaller than len(coll). A phi that
+// is already being checked is assumed to be at most len(coll); this is sound
+// because the result is true only if every input of every phi is.
+func atMostLen(coll, v ssa.Value, visiting map[ssa.Value]bool) bool {
+	switch v := v.(type) {
+	case *ssa.Const:
+		return v.Value == nil || v.Int64() == 0
+	case *ssa.Call:
+		return isLenOf(v, coll)
+	case *ssa.BinOp:
+		if v.Op != token.ADD {
+			return false
+		}
+		x := v.X
+		if !isConstOne(v.Y) {
+			if !isConstOne(v.X) {
+				return false
+			}
+			x = v.Y
+		}
+		// x < len(coll) here, so x + 1 <= len(coll).
+		return dominatingLess(coll, x, v, false)
+	case *ssa.Phi:
+		if visiting[v] {
+			return true
+		}
+		if !definedBefore(coll, v.Block()) {
+			// coll can change from one iteration to the next.
+			return false
+		}
+		visiting[v] = true
+		for _, edge := range v.Edges {
+			if !atMostLen(coll, edge, visiting) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// definedBefore returns whether v is defined before block and so does not
+// change while block runs again in a loop.
+func definedBefore(v ssa.Value, block *ssa.BasicBlock) bool {
+	instr, ok := v.(ssa.Instruction)
+	if !ok || instr.Block() == nil {
+		// Parameters, free variables, globals and constants.
+		return true
+	}
+	return instr.Block() != block && instr.Block().Dominates(block)
+}
+
+func (b *builder) isProvenBelowLen(coll, v ssa.Value, at ssa.Instruction, orEqual bool) bool {
+	return b.nonNegative(v, map[ssa.Value]bool{}) && dominatingLess(coll, v, at, orEqual)
+}
+
+// dominatingLess returns whether v < len(coll) (or v <= len(coll) if orEqual)
+// is true on every path to at, because a comparison on the same values of v
+// and coll was true.
+func dominatingLess(coll, v ssa.Value, at ssa.Instruction, orEqual bool) bool {
+	refs := v.Referrers()
 	if refs == nil {
 		return false
 	}
@@ -131,8 +201,11 @@ func (b *builder) isProvenIndex(coll, index ssa.Value, at ssa.Instruction) bool 
 		if !ok {
 			continue
 		}
-		if !(cmp.Op == token.LSS && cmp.X == index && isLenOf(cmp.Y, coll)) &&
-			!(cmp.Op == token.GTR && cmp.Y == index && isLenOf(cmp.X, coll)) {
+		less := (cmp.Op == token.LSS && cmp.X == v && isLenOf(cmp.Y, coll)) ||
+			(cmp.Op == token.GTR && cmp.Y == v && isLenOf(cmp.X, coll))
+		lessOrEqual := (cmp.Op == token.LEQ && cmp.X == v && isLenOf(cmp.Y, coll)) ||
+			(cmp.Op == token.GEQ && cmp.Y == v && isLenOf(cmp.X, coll))
+		if !less && !(orEqual && lessOrEqual) {
 			continue
 		}
 		for _, use := range *cmp.Referrers() {
@@ -208,4 +281,13 @@ func (b *builder) nonNegative(v ssa.Value, visiting map[ssa.Value]bool) bool {
 		return true
 	}
 	return false
+}
+
+// isProvenSliceLowOnly returns whether expr is coll[low:] with low proven to
+// be in bounds. Then low <= len(coll) is the only check, so it can be skipped.
+func (b *builder) isProvenSliceLowOnly(expr *ssa.Slice) bool {
+	if b.info.nobounds || expr.Low == nil || expr.High != nil || expr.Max != nil {
+		return false
+	}
+	return b.isProvenSliceLow(expr.X, expr.Low, expr)
 }

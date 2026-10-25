@@ -97,6 +97,70 @@ func lessOrEqual(s []byte) int {
 	return n
 }
 
+//go:noinline
+func sliceTail(s []byte) []byte {
+	for i := 0; i < len(s); i++ {
+		if s[i] == 'w' {
+			return s[i:]
+		}
+	}
+	return nil
+}
+
+//go:noinline
+func stringTail(s string) string {
+	i := 0
+	for i < len(s) && s[i] == ' ' {
+		i++
+	}
+	return s[i:]
+}
+
+//go:noinline
+func sliceAtEnd(s []byte, i int) []byte {
+	if i >= 0 && i <= len(s) {
+		return s[i:]
+	}
+	return nil
+}
+
+//go:noinline
+func sliceNegative(s []byte) []byte {
+	i := start
+	if i < len(s) {
+		return s[i:]
+	}
+	return nil
+}
+
+//go:noinline
+func sliceOther(s, t []byte) []byte {
+	i := len(t) - 1
+	if i < len(t) {
+		return s[i:]
+	}
+	return nil
+}
+
+//go:noinline
+func slicePastEnd(s []byte) []byte {
+	i := len(s) + 1
+	if i <= len(s)+1 {
+		return s[i:]
+	}
+	return nil
+}
+
+//go:noinline
+func shrinkTail(s []byte) []byte {
+	i := 0
+	for i < len(s) {
+		i++
+		s = s[:len(s)/2] // s gets shorter than i
+	}
+	return s[i:]
+}
+
 func mustPanic(name string, f func()) {
 	defer func() {
 		if recover() != nil {
@@ -119,4 +183,14 @@ func main() {
 	mustPanic("signedConvert", func() { signedConvert(data, 200) })
 	mustPanic("shortened", func() { shortened(data) })
 	mustPanic("lessOrEqual", func() { lessOrEqual(data) })
+
+	println("sliceTail:", string(sliceTail(data)))
+	println("stringTail:", stringTail(string(data)))
+	println("sliceAtEnd:", len(sliceAtEnd(data, len(data))), string(sliceAtEnd(data, 8)))
+	println("empty tails:", len(sliceTail(nil)), len(stringTail("")), len(sliceAtEnd(nil, 0)))
+
+	mustPanic("sliceNegative", func() { sliceNegative(data) })
+	mustPanic("sliceOther", func() { sliceOther(other, data) })
+	mustPanic("slicePastEnd", func() { slicePastEnd(data) })
+	mustPanic("shrinkTail", func() { shrinkTail(data) })
 }

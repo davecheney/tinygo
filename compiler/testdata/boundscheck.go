@@ -42,3 +42,22 @@ func negativeStart(s []byte, start int) int {
 	}
 	return n
 }
+
+// The low bound of a slice expression is proven the same way.
+
+func stringTail(s string) string {
+	i := 0
+	for i < len(s) && s[i] == ' ' {
+		i++
+	}
+	return s[i:]
+}
+
+// The low bound can be negative, so the check stays.
+
+func sliceFrom(s []byte, i int) []byte {
+	if i < len(s) {
+		return s[i:]
+	}
+	return nil
+}

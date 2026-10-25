@@ -8,3 +8,11 @@ otherSlice panicked
 signedConvert panicked
 shortened panicked
 lessOrEqual panicked
+sliceTail: world
+stringTail: hello world
+sliceAtEnd: 0 world
+empty tails: 0 0 0
+sliceNegative panicked
+sliceOther panicked
+slicePastEnd panicked
+shrinkTail panicked

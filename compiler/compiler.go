@@ -3014,7 +3014,9 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 				max = oldCap
 			}
 
-			b.createSliceBoundsCheck(oldCap, low, high, max, lowType, highType, maxType, expr.High == nil && expr.Max == nil)
+			if !b.isProvenSliceLowOnly(expr) {
+				b.createSliceBoundsCheck(oldCap, low, high, max, lowType, highType, maxType, expr.High == nil && expr.Max == nil)
+			}
 
 			// Truncate ints bigger than uintptr. This is after the bounds
 			// check so it's safe.
@@ -3058,7 +3060,9 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 				high = oldLen
 			}
 
-			b.createSliceBoundsCheck(oldLen, low, high, high, lowType, highType, maxType, false)
+			if !b.isProvenSliceLowOnly(expr) {
+				b.createSliceBoundsCheck(oldLen, low, high, high, lowType, highType, maxType, false)
+			}
 
 			// Truncate ints bigger than uintptr. This is after the bounds
 			// check so it's safe.
