@@ -10,11 +10,12 @@ import (
 )
 
 var (
-	// We use a two-level map because that way it's easier to store and retrieve
-	// values.
-	globalMap map[unsafe.Pointer]any // map value type is always map[T]Handle[T]
+	globalRegistry []struct {
+		typeptr unsafe.Pointer
+		values  any // always map[T]Handle[T]
+	}
 
-	globalMapMutex sync.Mutex
+	globalRegistryMutex sync.Mutex
 )
 
 // Unique handle for the given value. Comparing two handles is cheap.
@@ -37,22 +38,23 @@ func Make[T comparable](value T) Handle[T] {
 	// goal here is compatibility. If the performance is a problem, it can be
 	// optimized later.
 
-	globalMapMutex.Lock()
-
-	// The map isn't initialized at program startup (and after a test run), so
-	// create it.
-	if globalMap == nil {
-		globalMap = make(map[unsafe.Pointer]any)
-	}
+	globalRegistryMutex.Lock()
 
 	// Retrieve the type-specific map, creating it if not yet present.
 	typeptr, _ := decomposeInterface(value)
 	var typeSpecificMap map[T]Handle[T]
-	if typeSpecificMapValue, ok := globalMap[typeptr]; !ok {
+	for _, entry := range globalRegistry {
+		if entry.typeptr == typeptr {
+			typeSpecificMap = entry.values.(map[T]Handle[T])
+			break
+		}
+	}
+	if typeSpecificMap == nil {
 		typeSpecificMap = make(map[T]Handle[T])
-		globalMap[typeptr] = typeSpecificMap
-	} else {
-		typeSpecificMap = typeSpecificMapValue.(map[T]Handle[T])
+		globalRegistry = append(globalRegistry, struct {
+			typeptr unsafe.Pointer
+			values  any
+		}{typeptr, typeSpecificMap})
 	}
 
 	// Retrieve the handle for the value, creating it if it isn't created yet.
@@ -65,7 +67,7 @@ func Make[T comparable](value T) Handle[T] {
 		handle = h
 	}
 
-	globalMapMutex.Unlock()
+	globalRegistryMutex.Unlock()
 
 	return handle
 }

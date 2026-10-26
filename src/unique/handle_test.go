@@ -31,11 +31,7 @@ type testStruct struct {
 }
 
 func TestHandle(t *testing.T) {
-	t.Cleanup(func() {
-		globalMapMutex.Lock()
-		globalMap = nil
-		globalMapMutex.Unlock()
-	})
+	t.Cleanup(clearGlobalRegistry)
 
 	testHandle[testString](t, "foo")
 	testHandle[testString](t, "bar")
@@ -48,6 +44,39 @@ func TestHandle(t *testing.T) {
 		s: [2]testStringStruct{testStringStruct{"y"}, testStringStruct{"z"}},
 	})
 	testHandle[testStruct](t, testStruct{0.5, "184"})
+}
+
+func TestHandleMultipleTypes(t *testing.T) {
+	t.Cleanup(clearGlobalRegistry)
+
+	type firstString string
+	type secondString string
+
+	first := Make(firstString("same"))
+	second := Make(secondString("same"))
+	plain := Make("same")
+
+	for i := 0; i < 10; i++ {
+		if got := Make(firstString("same")); got != first || got.Value() != "same" {
+			t.Fatal("firstString handle was not reused")
+		}
+		if got := Make(secondString("same")); got != second || got.Value() != "same" {
+			t.Fatal("secondString handle was not reused")
+		}
+		if got := Make("same"); got != plain || got.Value() != "same" {
+			t.Fatal("string handle was not reused")
+		}
+	}
+
+	if Make(firstString("different")) == first {
+		t.Fatal("different values have the same handle")
+	}
+}
+
+func clearGlobalRegistry() {
+	globalRegistryMutex.Lock()
+	globalRegistry = nil
+	globalRegistryMutex.Unlock()
 }
 
 func testHandle[T comparable](t *testing.T, value T) {
