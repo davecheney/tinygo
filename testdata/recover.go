@@ -52,6 +52,9 @@ func main() {
 	println("\n# recover from nil map and closed channel")
 	recoverNilMapAndChan()
 
+	println("\n# recover from closed channel select in the same function")
+	recoverClosedChanSelect()
+
 	println("\n# recover from hardware signals")
 	recoverSignals()
 }
@@ -423,6 +426,37 @@ func recoverNilMapAndChan() {
 		var ch chan int
 		close(ch)
 	})
+}
+
+// Test recovering from a select send to a closed channel when the select and
+// the deferred recover are in the same function.
+func recoverClosedChanSelect() {
+	ch := make(chan int)
+	close(ch)
+	func() {
+		defer func() {
+			println("  recovered nonblocking:", recover() != nil)
+		}()
+		select {
+		case ch <- 1:
+		default:
+		}
+	}()
+	v, ok := <-ch
+	println("  receive after recover:", v, ok)
+
+	ch = make(chan int)
+	never := make(chan int)
+	func() {
+		go close(ch)
+		defer func() {
+			println("  recovered blocking:", recover() != nil)
+		}()
+		select {
+		case ch <- 1:
+		case <-never:
+		}
+	}()
 }
 
 // Test recovering from hardware signals (SIGFPE, SIGSEGV).

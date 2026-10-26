@@ -215,18 +215,11 @@ func (ch *channel) bufferPop(value unsafe.Pointer) {
 
 // Try to proceed with this send operation without blocking, and return whether
 // the send succeeded. Schedule a returned task only after releasing all locks.
-// Interrupts must be disabled and the channel lock must be held.
+// Interrupts must be disabled, the channel lock must be held, and the channel
+// must not be closed.
 func (ch *channel) trySend(value unsafe.Pointer) (sent bool, wake *task.Task) {
 	// To make sure we send values in the correct order, we can only send
 	// directly to a receiver when there are no values in the buffer.
-
-	// Do not allow sending on a closed channel.
-	if ch.closed {
-		// Note: we cannot currently recover from this panic.
-		// There's some state in the select statement especially that would be
-		// corrupted if we allowed recovering from this panic.
-		runtimePanic(errSendOnClosedChannel)
-	}
 
 	// There is no value in the buffer and we have a receiver available. Copy
 	// the value directly into the receiver.
@@ -255,6 +248,12 @@ func chanSend(ch *channel, value unsafe.Pointer, op *channelOp) {
 
 	mask := interrupt.Disable()
 	ch.lock.Lock()
+
+	if ch.closed {
+		ch.lock.Unlock()
+		interrupt.Restore(mask)
+		runtimePanic(errSendOnClosedChannel)
+	}
 
 	// See whether we can proceed immediately, and if so, return early.
 	if sent, wake := ch.trySend(value); sent {
@@ -380,6 +379,12 @@ func chanTrySend(ch *channel, value unsafe.Pointer) bool {
 
 	mask := interrupt.Disable()
 	ch.lock.Lock()
+
+	if ch.closed {
+		ch.lock.Unlock()
+		interrupt.Restore(mask)
+		runtimePanic(errSendOnClosedChannel)
+	}
 
 	sent, wake := ch.trySend(value)
 
@@ -575,6 +580,12 @@ func chanSelect(recvbuf unsafe.Pointer, states []chanSelectState, ops []channelO
 				break
 			}
 		} else { // chan send
+			if state.ch.closed {
+				unlockAllStates(states)
+				chanSelectLock.Unlock()
+				interrupt.Restore(mask)
+				runtimePanic(errSendOnClosedChannel)
+			}
 			if sent, receiver := state.ch.trySend(state.value); sent {
 				selectIndex = uint32(i)
 				wake = receiver
@@ -654,6 +665,11 @@ func chanSelect(recvbuf unsafe.Pointer, states []chanSelectState, ops []channelO
 	// Pull the return values out of t.Data (which contains two bitfields).
 	selectIndex = t.DataUint32() >> 2
 	selectOk = t.DataUint32()&chanOperationMask != chanOperationClosed
+
+	if !selectOk && states[selectIndex].value != nil {
+		// The channel was closed while this select was waiting to send.
+		runtimePanic(errSendOnClosedChannel)
+	}
 
 	return selectIndex, selectOk
 }
