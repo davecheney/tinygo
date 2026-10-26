@@ -121,40 +121,55 @@ func (n number) other() int { return int(n) }
 func main() { println(callback.other()) }`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, opt := range []string{"0", "2"} {
-				t.Run(opt, func(t *testing.T) {
-					tmpdir := t.TempDir()
-					path := filepath.Join(tmpdir, "main.go")
-					if err := os.WriteFile(path, []byte("package main\n"+tc.source+"\n"), 0o600); err != nil {
-						t.Fatal(err)
-					}
-					options := optionsFromTarget("wasip1", sema)
-					options.Opt = opt
-					options.Scheduler = "none"
-					options.InterpMaxLoopIterations = interp.DefaultMaxInterpBlockEntries
-					config, err := builder.NewConfig(&options)
-					if err != nil {
-						t.Fatal(err)
-					}
-					out := filepath.Join(tmpdir, "main.ll")
-					_, err = builder.Build(path, out, tmpdir, config)
-					if tc.fail {
-						if err == nil || !strings.Contains(err.Error(), "//go:noruntime function ") || !strings.Contains(err.Error(), " remains reachable at runtime") {
-							t.Fatalf("expected noruntime error, got %v", err)
-						}
-						return
-					}
-					if err != nil {
-						t.Fatal(err)
-					}
-					data, err := os.ReadFile(out)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if strings.Contains(string(data), "tinygo-noruntime") {
-						t.Fatal("noruntime function remains in output")
-					}
-				})
+			testNoRuntime(t, "wasip1", tc.source, tc.fail)
+		})
+	}
+}
+
+// TestNoRuntimeDefer checks that interp evaluates pointer arithmetic in a
+// function with a defer frame. The host target uses setjmp unwinding, which
+// gives such functions a defer frame.
+func TestNoRuntimeDefer(t *testing.T) {
+	testNoRuntime(t, "", `import "unsafe"
+var result = calc(4)
+//go:noruntime
+func calc(n int) uintptr { defer func() {}(); b := make([]byte, n); return uintptr(unsafe.Pointer(&b[0])) + 1 }
+func main() { println(result) }`, false)
+}
+
+func testNoRuntime(t *testing.T, target, source string, fail bool) {
+	for _, opt := range []string{"0", "2"} {
+		t.Run(opt, func(t *testing.T) {
+			tmpdir := t.TempDir()
+			path := filepath.Join(tmpdir, "main.go")
+			if err := os.WriteFile(path, []byte("package main\n"+source+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			options := optionsFromTarget(target, sema)
+			options.Opt = opt
+			options.Scheduler = "none"
+			options.InterpMaxLoopIterations = interp.DefaultMaxInterpBlockEntries
+			config, err := builder.NewConfig(&options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := filepath.Join(tmpdir, "main.ll")
+			_, err = builder.Build(path, out, tmpdir, config)
+			if fail {
+				if err == nil || !strings.Contains(err.Error(), "//go:noruntime function ") || !strings.Contains(err.Error(), " remains reachable at runtime") {
+					t.Fatalf("expected noruntime error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), "tinygo-noruntime") {
+				t.Fatal("noruntime function remains in output")
 			}
 		})
 	}
