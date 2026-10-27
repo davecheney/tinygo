@@ -7,10 +7,6 @@ import (
 	"machine"
 )
 
-func initUART() {
-	machine.InitSerial()
-}
-
 func putchar(c byte) {
 	machine.Serial.WriteByte(c)
 }

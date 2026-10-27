@@ -45,6 +45,7 @@ func (dev *USBDevice) Configure(config UARTConfig) {
 	for !avr.PLLCSR.HasBits(avr.PLLCSR_PLOCK) {
 	}
 	avr.USBCON.ClearBits(avr.USBCON_FRZCLK)
+	avr.USBCON.SetBits(avr.USBCON_OTGPADE)
 
 	avr.UDIEN.Set(avr.UDIEN_EORSTE | avr.UDIEN_SOFE)
 	interrupt.New(avr.IRQ_USB_GEN, handleUSBGenIRQ)
@@ -137,6 +138,15 @@ func handleUSBSetup() {
 	setup := usb.NewSetup(data[:])
 	if setup.BmRequestType&usb.REQUEST_DIRECTION == 0 {
 		clearEndpointIN()
+	} else {
+		timeout := uint16(0xffff)
+		for !avr.UEINTX.HasBits(avr.UEINTX_TXINI) && timeout > 0 {
+			timeout--
+		}
+		if timeout == 0 {
+			stallEndpoint()
+			return
+		}
 	}
 
 	ok := false

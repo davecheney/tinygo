@@ -2,4 +2,14 @@
 
 package runtime
 
-import _ "machine/usb/cdc"
+import (
+	"machine"
+	_ "machine/usb/cdc"
+)
+
+func initUART() {}
+
+func init() {
+	// USB initialization allocates and must run after initHeap.
+	machine.InitSerial()
+}
