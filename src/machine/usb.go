@@ -1,4 +1,4 @@
-//go:build sam || nrf52840 || rp2040 || rp2350 || stm32f4 || stm32f7 || stm32h7 || mimxrt1062 || (esp32s3 && usbotg)
+//go:build sam || nrf52840 || rp2040 || rp2350 || stm32f4 || stm32f7 || stm32h7 || mimxrt1062 || (esp32s3 && usbotg) || arduino_leonardo
 
 package machine
 
@@ -105,30 +105,12 @@ var (
 )
 
 var (
-	usbEndpointDescriptors [NumberOfUSBEndpoints]descriptor.Device
-
 	isEndpointHalt        = false
 	isRemoteWakeUpEnabled = false
 
 	usbConfiguration uint8
 	usbSetInterface  uint8
 )
-
-//go:align 4
-var udd_ep_control_cache_buffer [256]uint8
-
-//go:align 4
-var udd_ep_in_cache_buffer [NumberOfUSBEndpoints][64]uint8
-
-//go:align 4
-var udd_ep_out_cache_buffer [NumberOfUSBEndpoints][64]uint8
-
-// usb_trans_buffer max size is 255 since that is max size
-// for a descriptor (bLength is 1 byte), and the biggest use
-// for this buffer is to transmit string descriptors.  If
-// this buffer is used for new purposes in future the length
-// must be revisited.
-var usb_trans_buffer [255]uint8
 
 var (
 	usbTxHandler    [NumberOfUSBEndpoints]func()
@@ -387,33 +369,34 @@ func EnableCDC(txHandler func(), rxHandler func([]byte), setupHandler func(usb.S
 func PhysicalEndpoint(ep uint32) uint32 { return ep }
 
 func ConfigureUSBEndpoint(desc descriptor.Descriptor, epSettings []usb.EndpointConfig, setup []usb.SetupConfig) {
-	usbDescriptor = desc
+	usbDescriptor = prepareUSBDescriptor(desc)
 
 	for _, ep := range epSettings {
+		physicalEndpoint := physicalUSBEndpoint(ep.Index, ep.IsIn)
 		if ep.IsIn {
 			endPoints = append(endPoints, usbEndpointEntry{
-				Endpoint: uint32(ep.Index),
+				Endpoint: uint32(physicalEndpoint),
 				Config:   uint32(ep.Type | usb.EndpointIn),
 			})
 			if ep.TxHandler != nil {
-				usbTxHandler[ep.Index] = ep.TxHandler
+				usbTxHandler[physicalEndpoint] = ep.TxHandler
 			}
 		} else {
 			endPoints = append(endPoints, usbEndpointEntry{
-				Endpoint: uint32(ep.Index),
+				Endpoint: uint32(physicalEndpoint),
 				Config:   uint32(ep.Type | usb.EndpointOut),
 			})
 			if ep.RxHandler != nil {
-				usbRxHandler[ep.Index] = func(b []byte) bool {
+				usbRxHandler[physicalEndpoint] = func(b []byte) bool {
 					ep.RxHandler(b)
 					return true
 				}
 			} else if ep.DelayRxHandler != nil {
-				usbRxHandler[ep.Index] = ep.DelayRxHandler
+				usbRxHandler[physicalEndpoint] = ep.DelayRxHandler
 			}
 		}
 		if ep.StallHandler != nil {
-			usbStallHandler[ep.Index] = ep.StallHandler
+			usbStallHandler[physicalEndpoint] = ep.StallHandler
 		}
 	}
 

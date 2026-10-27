@@ -2,6 +2,13 @@
 
 package machine
 
+var (
+	usb_VID                 uint16 = 0x2341
+	usb_PID                 uint16 = 0x8036
+	usb_STRING_MANUFACTURER        = "Arduino"
+	usb_STRING_PRODUCT             = "Arduino Leonardo"
+)
+
 // Return the current CPU frequency in hertz.
 func CPUFrequency() uint32 {
 	return 16000000

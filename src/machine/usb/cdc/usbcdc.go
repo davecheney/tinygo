@@ -6,7 +6,6 @@ import (
 	"errors"
 	"machine"
 	"machine/usb"
-	"sync/atomic"
 	_ "unsafe"
 )
 
@@ -30,7 +29,7 @@ type USBCDC struct {
 	rx ring512
 
 	// inflight is the number of bytes currently submitted to the USB IN endpoint.
-	inflight atomic.Uint32
+	inflight cdcAtomicUint32
 
 	// needZLP is set when the last packet was full size, so the transfer is not yet ended.
 	needZLP bool
@@ -42,7 +41,7 @@ type USBCDC struct {
 	// pump against Write across cores. Same model as Linux NAPI_STATE_SCHED:
 	// held across completion, dropped only with a recheck
 	// (Documentation/networking/napi.rst).
-	txActive atomic.Uint32
+	txActive cdcAtomicUint32
 
 	rbuf [1]byte
 	wbuf [1]byte

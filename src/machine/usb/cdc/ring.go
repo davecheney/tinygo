@@ -1,3 +1,5 @@
+//go:build !atmega32u4
+
 package cdc
 
 import "sync/atomic"
@@ -17,10 +19,7 @@ type ring512 struct {
 	tail atomic.Uint32
 }
 
-const (
-	ringBufLen = 512
-	ringMask   = ringBufLen - 1 // 0x1FF
-)
+const ringMask = ringBufLen - 1
 
 // Reset empties the ring buffer. Must not be called concurrently with
 // Put, Peek, or Discard.
