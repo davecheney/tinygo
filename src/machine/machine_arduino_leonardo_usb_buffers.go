@@ -8,7 +8,6 @@ const NumberOfUSBEndpoints = 4
 
 var (
 	udd_ep_control_cache_buffer [128]uint8
-	udd_ep_out_cache_buffer     [NumberOfUSBEndpoints][64]uint8
 	usb_trans_buffer            [128]uint8
 )
 

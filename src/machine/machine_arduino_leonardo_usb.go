@@ -5,6 +5,7 @@ package machine
 import (
 	"device"
 	"device/avr"
+	"errors"
 	"machine/usb"
 	"runtime/interrupt"
 	"runtime/volatile"
@@ -25,10 +26,12 @@ var (
 		pending bool
 	}
 
-	usbINFlight          [NumberOfUSBEndpoints]bool
+	usbCDCNeedsZLP       bool
 	usbSetAddressPending bool
 	usbPendingAddress    uint8
 )
+
+var ErrUSBWriteTimeout = errors.New("USB write timeout")
 
 func (dev *USBDevice) Configure(config UARTConfig) {
 	if dev.initcomplete {
@@ -43,7 +46,7 @@ func (dev *USBDevice) Configure(config UARTConfig) {
 	}
 	avr.USBCON.ClearBits(avr.USBCON_FRZCLK)
 
-	avr.UDIEN.Set(avr.UDIEN_EORSTE)
+	avr.UDIEN.Set(avr.UDIEN_EORSTE | avr.UDIEN_SOFE)
 	interrupt.New(avr.IRQ_USB_GEN, handleUSBGenIRQ)
 	interrupt.New(avr.IRQ_USB_COM, handleUSBEndpointIRQ)
 
@@ -61,8 +64,11 @@ func (dev *USBDevice) Detach() {
 
 func handleUSBGenIRQ(interrupt.Interrupt) {
 	flags := avr.UDINT.Get()
-	avr.UDINT.Set(flags &^ avr.UDINT_EORSTI)
+	avr.UDINT.Set(^(flags & (avr.UDINT_EORSTI | avr.UDINT_SOFI)))
 	if flags&avr.UDINT_EORSTI == 0 {
+		if flags&avr.UDINT_SOFI != 0 && USBDev.InitEndpointComplete {
+			FlushUSBInFIFO(usb.CDC_ENDPOINT_IN)
+		}
 		return
 	}
 
@@ -72,28 +78,35 @@ func handleUSBGenIRQ(interrupt.Interrupt) {
 	usbSetAddressPending = false
 	usbConfiguration = 0
 	USBDev.InitEndpointComplete = false
+	usbCDCNeedsZLP = false
+	cdcReset()
 
+	for ep := uint8(1); ep < NumberOfUSBEndpoints; ep++ {
+		avr.UENUM.Set(ep)
+		avr.UEIENX.Set(0)
+		avr.UECONX.Set(0)
+		avr.UECFG1X.Set(0)
+	}
 	initEndpoint(usb.CONTROL_ENDPOINT, usb.ENDPOINT_TYPE_CONTROL)
 	avr.UDADDR.Set(0)
 }
 
 func handleUSBEndpointIRQ(interrupt.Interrupt) {
-	for ep := uint32(0); ep < NumberOfUSBEndpoints; ep++ {
-		avr.UENUM.Set(uint8(ep))
-		flags := avr.UEINTX.Get()
-
-		if ep == usb.CONTROL_ENDPOINT && flags&avr.UEINTX_RXSTPI != 0 {
-			handleUSBSetup()
-			continue
+	avr.UENUM.Set(usb.CONTROL_ENDPOINT)
+	flags := avr.UEINTX.Get() & avr.UEIENX.Get()
+	if flags&avr.UEINTX_RXSTPI != 0 {
+		handleUSBSetup()
+		return
+	}
+	if flags&avr.UEINTX_RXOUTI != 0 {
+		count := int(avr.UEBCLX.Get())
+		for i := 0; i < count; i++ {
+			avr.UEDATX.Get()
 		}
-
-		if flags&avr.UEINTX_RXOUTI != 0 {
-			handleEndpointOUT(ep)
-		}
-
-		if flags&avr.UEINTX_TXINI != 0 {
-			handleEndpointIN(ep)
-		}
+		AckUsbOutTransfer(usb.CONTROL_ENDPOINT)
+	}
+	if flags&avr.UEINTX_TXINI != 0 {
+		handleEndpointIN(usb.CONTROL_ENDPOINT)
 	}
 }
 
@@ -128,11 +141,25 @@ func handleUSBSetup() {
 
 	ok := false
 	if setup.BmRequestType&usb.REQUEST_TYPE == usb.REQUEST_STANDARD {
-		ok = handleStandardSetup(setup)
+		if setup.BRequest == usb.SET_CONFIGURATION {
+			ok = setup.BmRequestType == usb.REQUEST_HOSTTODEVICE|usb.REQUEST_DEVICE &&
+				setup.WValueH == 0 && setup.WValueL <= 1 && setup.WIndex == 0 && setup.WLength == 0
+			if ok && setup.WValueL == 0 {
+				usbConfiguration = 0
+				USBDev.InitEndpointComplete = false
+				usbCDCNeedsZLP = false
+				cdcReset()
+			} else if ok {
+				ok = handleStandardSetup(setup)
+			}
+		} else {
+			ok = handleStandardSetup(setup)
+		}
 	} else if setup.WIndex < uint16(len(usbSetupHandler)) && usbSetupHandler[setup.WIndex] != nil {
 		ok = usbSetupHandler[setup.WIndex](setup)
 	}
 
+	avr.UENUM.Set(usb.CONTROL_ENDPOINT)
 	if !ok {
 		stallEndpoint()
 		return
@@ -145,32 +172,6 @@ func handleUSBSetup() {
 	clearEndpointIN()
 }
 
-func handleEndpointOUT(ep uint32) {
-	count := int(avr.UEBCLX.Get())
-	if ep == usb.CONTROL_ENDPOINT {
-		for i := 0; i < count; i++ {
-			avr.UEDATX.Get()
-		}
-		AckUsbOutTransfer(ep)
-		return
-	}
-	if count > usbEndpointSize {
-		for i := 0; i < count; i++ {
-			avr.UEDATX.Get()
-		}
-		AckUsbOutTransfer(ep)
-		return
-	}
-
-	buffer := udd_ep_out_cache_buffer[ep][:count]
-	for i := range buffer {
-		buffer[i] = avr.UEDATX.Get()
-	}
-	if usbRxHandler[ep] == nil || usbRxHandler[ep](buffer) {
-		AckUsbOutTransfer(ep)
-	}
-}
-
 func handleEndpointIN(ep uint32) {
 	switch {
 	case ep == usb.CONTROL_ENDPOINT && usbSetAddressPending:
@@ -180,14 +181,85 @@ func handleEndpointIN(ep uint32) {
 
 	case ep == usb.CONTROL_ENDPOINT && usbEP0Transfer.pending:
 		sendNextEP0Packet()
+		clearEndpointIN()
+	}
+}
 
-	case ep != usb.CONTROL_ENDPOINT && usbINFlight[ep]:
-		usbINFlight[ep] = false
-		avr.UEIENX.ClearBits(avr.UEIENX_TXINE)
-		if usbTxHandler[ep] != nil {
-			usbTxHandler[ep]()
+// USBOutBuffered returns the unread bytes in the selected OUT endpoint FIFO.
+func USBOutBuffered(ep uint8) int {
+	state := interrupt.Disable()
+	selected := avr.UENUM.Get()
+	avr.UENUM.Set(physicalUSBEndpoint(ep, false))
+	count := 0
+	if USBDev.InitEndpointComplete && avr.UEINTX.HasBits(avr.UEINTX_RXOUTI) {
+		count = int(avr.UEBCLX.Get())
+		if count == 0 {
+			avr.UEINTX.Set(usbEndpointReleaseRX)
 		}
 	}
+	avr.UENUM.Set(selected)
+	interrupt.Restore(state)
+	return count
+}
+
+// ReadUSBOutPacket reads directly from an OUT endpoint, retaining unread bytes in the FIFO.
+func ReadUSBOutPacket(ep uint8, data []byte) int {
+	state := interrupt.Disable()
+	selected := avr.UENUM.Get()
+	avr.UENUM.Set(physicalUSBEndpoint(ep, false))
+	n := 0
+	if USBDev.InitEndpointComplete && avr.UEINTX.HasBits(avr.UEINTX_RXOUTI) {
+		count := int(avr.UEBCLX.Get())
+		n = min(count, len(data))
+		for i := 0; i < n; i++ {
+			data[i] = avr.UEDATX.Get()
+		}
+		if n == count {
+			avr.UEINTX.Set(usbEndpointReleaseRX)
+		}
+	}
+	avr.UENUM.Set(selected)
+	interrupt.Restore(state)
+	return n
+}
+
+// WriteUSBInFIFO fills an IN endpoint FIFO without waiting for the host.
+func WriteUSBInFIFO(ep uint8, data []byte) int {
+	state := interrupt.Disable()
+	selected := avr.UENUM.Get()
+	avr.UENUM.Set(physicalUSBEndpoint(ep, true))
+	n := 0
+	if USBDev.InitEndpointComplete && avr.UEINTX.HasBits(avr.UEINTX_RWAL) {
+		count := int(avr.UEBCLX.Get())
+		n = min(usbEndpointSize-count, len(data))
+		for _, b := range data[:n] {
+			avr.UEDATX.Set(b)
+		}
+		if n > 0 {
+			usbCDCNeedsZLP = count+n == usbEndpointSize
+			if usbCDCNeedsZLP {
+				avr.UEINTX.Set(usbEndpointReleaseTX)
+			}
+		}
+	}
+	avr.UENUM.Set(selected)
+	interrupt.Restore(state)
+	return n
+}
+
+// FlushUSBInFIFO releases a partial packet or the ZLP following a full packet.
+func FlushUSBInFIFO(ep uint8) {
+	state := interrupt.Disable()
+	selected := avr.UENUM.Get()
+	avr.UENUM.Set(physicalUSBEndpoint(ep, true))
+	if USBDev.InitEndpointComplete && avr.UEINTX.HasBits(avr.UEINTX_TXINI) {
+		if avr.UEBCLX.Get() != 0 || usbCDCNeedsZLP {
+			avr.UEINTX.Set(usbEndpointReleaseTX)
+			usbCDCNeedsZLP = false
+		}
+	}
+	avr.UENUM.Set(selected)
+	interrupt.Restore(state)
 }
 
 func initEndpoint(ep, config uint32) {
@@ -217,15 +289,14 @@ func initEndpoint(ep, config uint32) {
 		mask := uint8(1 << ep)
 		avr.UERST.SetBits(mask)
 		avr.UERST.ClearBits(mask)
+		if ep == uint32(physicalUSBEndpoint(usb.CDC_ENDPOINT_IN, true)) {
+			usbCDCNeedsZLP = false
+		}
 	}
 
 	switch {
 	case ep == usb.CONTROL_ENDPOINT:
 		avr.UEIENX.Set(avr.UEIENX_RXSTPE | avr.UEIENX_RXOUTE)
-	case direction == avr.UECFG0X_EPDIR && config&0x03 == usb.ENDPOINT_TYPE_BULK:
-		avr.UEIENX.Set(0)
-	case direction == 0 && config&0x03 == usb.ENDPOINT_TYPE_BULK:
-		avr.UEIENX.Set(avr.UEIENX_RXOUTE)
 	default:
 		avr.UEIENX.Set(0)
 	}
@@ -237,6 +308,7 @@ func sendUSBPacket(ep uint32, data []byte) {
 		return
 	}
 
+	avr.UENUM.Set(usb.CONTROL_ENDPOINT)
 	usbEP0Transfer.data = data
 	usbEP0Transfer.offset = 0
 	usbEP0Transfer.pending = len(data) > usbEndpointSize
@@ -270,8 +342,10 @@ func SendUSBInPacket(ep uint32, data []byte) bool {
 	}
 
 	state := interrupt.Disable()
+	selected := avr.UENUM.Get()
 	avr.UENUM.Set(uint8(ep))
 	if !avr.UEINTX.HasBits(avr.UEINTX_TXINI) {
+		avr.UENUM.Set(selected)
 		interrupt.Restore(state)
 		return false
 	}
@@ -279,9 +353,8 @@ func SendUSBInPacket(ep uint32, data []byte) bool {
 	for _, b := range data {
 		avr.UEDATX.Set(b)
 	}
-	usbINFlight[ep] = true
-	avr.UEIENX.SetBits(avr.UEIENX_TXINE)
 	avr.UEINTX.Set(usbEndpointReleaseTX)
+	avr.UENUM.Set(selected)
 	interrupt.Restore(state)
 	return true
 }
@@ -311,18 +384,6 @@ func ReceiveUSBControlPacket() ([cdcLineInfoSize]byte, error) {
 	}
 	AckUsbOutTransfer(usb.CONTROL_ENDPOINT)
 	return data, nil
-}
-
-func handleEndpointRx(ep uint32) []byte {
-	count := int(avr.UEBCLX.Get())
-	if count > usbEndpointSize {
-		count = usbEndpointSize
-	}
-	buffer := udd_ep_out_cache_buffer[ep][:count]
-	for i := range buffer {
-		buffer[i] = avr.UEDATX.Get()
-	}
-	return buffer
 }
 
 func AckUsbOutTransfer(ep uint32) {
