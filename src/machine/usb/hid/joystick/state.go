@@ -33,7 +33,20 @@ type AxisValue struct {
 }
 
 func fit(x, in_min, in_max int, out_min, out_max int16) int16 {
-	return int16((x-in_min)*(int(out_max)-int(out_min))/(in_max-in_min) + int(out_min))
+	inSpan := in_max - in_min
+	outSpan := int(out_max) - int(out_min)
+	inHalf, outHalf := inSpan/2, outSpan/2
+	numerator := (x - in_min - inHalf) * outSpan
+	numerator += inHalf*(outSpan%2) - outHalf*(inSpan%2)
+	scaled := numerator / inSpan
+	if numerator%inSpan != 0 {
+		if (numerator < 0) != (inSpan < 0) && outHalf+scaled > 0 {
+			scaled--
+		} else if (numerator < 0) == (inSpan < 0) && outHalf+scaled < 0 {
+			scaled++
+		}
+	}
+	return int16(int(out_min) + outHalf + scaled)
 }
 
 func fitf(x, in_min, in_max, out_min, out_max float32) float32 {
