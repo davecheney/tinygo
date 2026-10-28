@@ -148,8 +148,20 @@ func adjustMonotonicTimer() {
 func currentNanosecondsInTick() int64 {
 	// this time depends on clk_IO, prescale, mode and OCR0A
 	// assuming the clock source is CPU clock
-	prescaler := int64(avr.TCCR0B.Get() & 0x7)
-	clock := (int64(1e12) / prescaler) / int64(machine.CPUFrequency())
+	var prescaler int64
+	switch avr.TCCR0B.Get() & 0x7 {
+	case 2:
+		prescaler = 8
+	case 3:
+		prescaler = 64
+	case 4:
+		prescaler = 256
+	case 5:
+		prescaler = 1024
+	default:
+		prescaler = 1
+	}
+	clock := prescaler * int64(1e12) / int64(machine.CPUFrequency())
 	mode := avr.TCCR0A.Get() & 0x7
 
 	/*
