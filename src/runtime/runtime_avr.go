@@ -153,7 +153,18 @@ func initMonotonicTimer() {
 //go:linkname adjustMonotonicTimer machine.adjustMonotonicTimer
 func adjustMonotonicTimer() {
 	mask := interrupt.Disable()
+	// Count the time since the last tick with the old tick length, so ticks() does not jump.
+	t := volatile.LoadUint64((*uint64)(unsafe.Pointer(&ticksCount)))
+	if avr.TIFR0.Get()&avr.TIFR0_TOV0 != 0 {
+		t += uint64(nanosecondsInTick)
+		// Writing one clears the flag, see ATmega328P datasheet section 15.9.7.
+		avr.TIFR0.Set(avr.TIFR0_TOV0)
+	}
+	count := uint32(avr.TCNT0.Get())
+	t += uint64(count * nanosecondsInCount)
 	setTickLength()
+	t -= uint64(count * nanosecondsInCount)
+	volatile.StoreUint64((*uint64)(unsafe.Pointer(&ticksCount)), t)
 	interrupt.Restore(mask)
 }
 
