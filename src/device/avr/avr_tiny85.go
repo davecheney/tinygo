@@ -13,3 +13,9 @@ const (
 	TIMSK0_OCIE0B = TIMSK_OCIE0B
 	TIMSK0_TOIE0  = TIMSK_TOIE0
 )
+
+// The attiny85 has only TIFR, create an alias of TIFR0 for the same reason.
+
+var TIFR0 = TIFR
+
+const TIFR0_TOV0 = TIFR_TOV0
