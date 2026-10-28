@@ -74,12 +74,17 @@ func nanosecondsToTicks(ns int64) timeUnit {
 func sleepTicks(d timeUnit) {
 	waitTill := ticks() + d
 	for {
-		// wait for interrupt
-		avr.Asm("sleep")
-		if waitTill <= ticks() {
+		now := ticks()
+		if waitTill <= now {
 			// done waiting
 			return
 		}
+		if waitTill-now < timeUnit(nanosecondsInTick) {
+			// The next tick interrupt may come too late, so busy wait.
+			continue
+		}
+		// wait for interrupt
+		avr.Asm("sleep")
 		if hasScheduler {
 			// The interrupt may have awoken a goroutine, so bail out early.
 			return
@@ -87,12 +92,17 @@ func sleepTicks(d timeUnit) {
 	}
 }
 
-func ticks() (ticksReturn timeUnit) {
+func ticks() timeUnit {
 	state := interrupt.Disable()
 	// use volatile since ticksCount can be changed when running on multi-core boards.
-	ticksReturn = timeUnit(volatile.LoadUint64((*uint64)(unsafe.Pointer(&ticksCount))))
+	t := volatile.LoadUint64((*uint64)(unsafe.Pointer(&ticksCount)))
+	count := avr.TCNT0.Get()
+	// An overflow that is not yet handled means a full tick has passed.
+	if avr.TIFR0.Get()&avr.TIFR0_TOV0 != 0 && count != 0xff {
+		t += uint64(nanosecondsInTick)
+	}
 	interrupt.Restore(state)
-	return
+	return timeUnit(t + uint64(uint32(count)*nanosecondsInCount))
 }
 
 func exit(code int) {
@@ -108,8 +118,11 @@ func abort() {
 	}
 }
 
-var ticksCount int64                // nanoseconds since start
-var nanosecondsInTick int64 = 16000 // nanoseconds per each tick
+var ticksCount int64 // nanoseconds since start
+
+// The initial values match the prescaler and mode set in initMonotonicTimer.
+var nanosecondsInTick int64 = 64 * 256 * 1e9 / int64(machine.CPUFrequency()) // nanoseconds per each tick
+var nanosecondsInCount = uint32(nanosecondsInTick / 256)                     // nanoseconds per each count of TCNT0, 0 if unknown
 
 func initMonotonicTimer() {
 	ticksCount = 0
@@ -130,8 +143,8 @@ func initMonotonicTimer() {
 	avr.OCR0A.Set(0xff)
 	// - Set mode 3
 	avr.TCCR0A.Set(avr.TCCR0A_WGM00 | avr.TCCR0A_WGM01)
-	// - Set prescaler 1
-	avr.TCCR0B.Set(avr.TCCR0B_CS00)
+	// - Set prescaler 64, the same as the Arduino core, for one interrupt per 1024µs at 16MHz
+	avr.TCCR0B.Set(avr.TCCR0B_CS01 | avr.TCCR0B_CS00)
 
 	// - Unmask interrupt
 	avr.TIMSK0.SetBits(avr.TIMSK0_TOIE0)
@@ -139,17 +152,37 @@ func initMonotonicTimer() {
 
 //go:linkname adjustMonotonicTimer machine.adjustMonotonicTimer
 func adjustMonotonicTimer() {
-	// adjust the nanosecondsInTick using volatile
 	mask := interrupt.Disable()
-	volatile.StoreUint64((*uint64)(unsafe.Pointer(&nanosecondsInTick)), uint64(currentNanosecondsInTick()))
+	setTickLength()
 	interrupt.Restore(mask)
+}
+
+func setTickLength() {
+	nanosecondsInTick = currentNanosecondsInTick()
+	nanosecondsInCount = 0
+	switch avr.TCCR0A.Get() & 0x7 {
+	case 0, 3:
+		// TCNT0 counts up from 0x00 to 0xff.
+		nanosecondsInCount = uint32(nanosecondsInTick / 256)
+	}
 }
 
 func currentNanosecondsInTick() int64 {
 	// this time depends on clk_IO, prescale, mode and OCR0A
 	// assuming the clock source is CPU clock
-	prescaler := int64(avr.TCCR0B.Get() & 0x7)
-	clock := (int64(1e12) / prescaler) / int64(machine.CPUFrequency())
+	var prescaler int64
+	switch avr.TCCR0B.Get() & 0x7 {
+	case 2:
+		prescaler = 8
+	case 3:
+		prescaler = 64
+	case 4:
+		prescaler = 256
+	case 5:
+		prescaler = 1024
+	default:
+		prescaler = 1
+	}
 	mode := avr.TCCR0A.Get() & 0x7
 
 	/*
@@ -162,24 +195,26 @@ func currentNanosecondsInTick() int64 {
 	 5    1     0     1     PWM, Phase Correct  OCRA TOP        BOTTOM
 	 7    1     1     1     Fast PWM            OCRA BOTTOM     TOP
 	*/
+	var counts int64
 	switch mode {
 	case 0, 3:
 		// normal & fast PWM
 		// TOV0 Interrupt when moving from MAX (0xff) to 0x00
-		return clock * 256 / 1000
+		counts = 256
 	case 1:
 		// Phase Correct PWM
 		// TOV0 Interrupt when moving from MAX (0xff) to 0x00
-		return clock * 256 * 2 / 1000
+		counts = 256 * 2
 	case 2, 7:
 		// CTC & fast PWM
 		// TOV0 Interrupt when moving from MAX (OCRA) to 0x00
-		return clock * int64(avr.OCR0A.Get()) / 1000
+		counts = int64(avr.OCR0A.Get())
 	case 5:
 		// Phase Correct PWM
 		// TOV0 Interrupt when moving from MAX (OCRA) to 0x00
-		return clock * int64(avr.OCR0A.Get()) * 2 / 1000
+		counts = int64(avr.OCR0A.Get()) * 2
+	default:
+		counts = 1 // for unknown
 	}
-
-	return clock / 1000 // for unknown
+	return prescaler * counts * 1e9 / int64(machine.CPUFrequency())
 }
