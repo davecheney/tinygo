@@ -9,6 +9,7 @@ import (
 )
 
 const NumberOfUSBEndpoints = 8
+const usbDescriptorSize = 2048
 
 var (
 	sendOnEP0DATADONE struct {

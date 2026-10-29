@@ -115,7 +115,7 @@ var (
 )
 
 //go:align 4
-var udd_ep_control_cache_buffer [256]uint8
+var udd_ep_control_cache_buffer [usbDescriptorSize]uint8
 
 //go:align 4
 var udd_ep_in_cache_buffer [NumberOfUSBEndpoints][64]uint8
