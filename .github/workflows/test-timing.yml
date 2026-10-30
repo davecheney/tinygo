@@ -8,6 +8,18 @@ on:
 jobs:
   test-timing:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: build-emulated
+            flags: -run '^TestBuild$/^(X86Linux|ARMLinux|ARM64Linux|MIPSLinux|MIPS_little-endian|AVR|EmulatedCortexM3|EmulatedRISCV)$'
+          - name: build-other
+            flags: -run '^TestBuild$' -skip '^TestBuild$/^(X86Linux|ARMLinux|ARM64Linux|MIPSLinux|MIPS_little-endian|AVR|EmulatedCortexM3|EmulatedRISCV)$'
+          - name: test
+            flags: -run '^TestTest$'
+          - name: rest
+            flags: -skip '^(TestBuild|TestTest)$'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -52,7 +64,7 @@ jobs:
         run: make binaryen
       - run: make gen-device -j4
       - name: Test TinyGo
-        run: go test -tags=llvm22 -timeout=1h -json . > test.json || true
+        run: go test -tags=llvm22 -timeout=1h -json ${{ matrix.shard.flags }} . > test.json || true
       - name: Summarise
         run: |
           python3 - <<'EOF'
@@ -71,5 +83,5 @@ jobs:
           EOF
       - uses: actions/upload-artifact@v4
         with:
-          name: test-json
+          name: test-json-${{ matrix.shard.name }}
           path: test.json
