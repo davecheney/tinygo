@@ -6,6 +6,10 @@ inputs:
     description: Save LLVM caches after a cache miss
     required: false
     default: "true"
+  lookup-only:
+    description: Only check that the caches exist, and build LLVM if they do not
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -14,6 +18,7 @@ runs:
       uses: actions/cache/restore@v5
       id: cache-llvm-source
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         key: llvm-source-22-linux-ubuntu-24.04-asserts-v1-${{ hashFiles('llvm-version.txt') }}
         path: |
           llvm-project/clang/lib/Headers
@@ -40,6 +45,7 @@ runs:
       uses: actions/cache/restore@v5
       id: cache-llvm-build
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         key: llvm-build-22-linux-ubuntu-24.04-asserts-v1-${{ hashFiles('llvm-version.txt') }}
         path: llvm-build
     - name: Install Ninja

@@ -220,10 +220,55 @@ jobs:
           tar -C ~/lib -xf tinygo${{ needs.build-linux.outputs.version }}.linux-amd64.tar.gz
           ln -s ~/lib/tinygo/bin/tinygo ~/go/bin/tinygo
       - run: make testchdir ${{ matrix.group }}
+  assert-llvm:
+    # Build LLVM with assertions enabled and Binaryen, if they are not in the
+    # cache yet. The jobs below only restore them, so that a cache miss builds
+    # them once and not once for each job.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-llvm
+        with:
+          lookup-only: "true"
+      - name: Get Binaryen revision
+        id: binaryen-revision
+        run: echo "revision=$(git rev-parse HEAD:lib/binaryen)" >> "$GITHUB_OUTPUT"
+      - name: Cache Binaryen
+        uses: actions/cache@v5
+        id: cache-binaryen
+        with:
+          lookup-only: true
+          key: binaryen-linux-asserts-v2-${{ steps.binaryen-revision.outputs.revision }}
+          path: build/wasm-opt
+      - name: Build Binaryen
+        if: steps.cache-binaryen.outputs.cache-hit != 'true'
+        run: |
+          git submodule update --init lib/binaryen
+          make binaryen
+
   assert-test-linux:
     # Run all tests that can run on Linux, with LLVM assertions enabled to catch
-    # potential bugs.
+    # potential bugs. The tests are split into shards that run in parallel.
+    needs: assert-llvm
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: build-emulated
+            pkgs: .
+            flags: -run '^TestBuild$$/^(X86Linux|ARMLinux|ARM64Linux|MIPSLinux|MIPS_little-endian|AVR|EmulatedCortexM3|EmulatedRISCV)$$'
+          - name: build-other
+            pkgs: .
+            flags: -run '^TestBuild$$' -skip '^TestBuild$$/^(X86Linux|ARMLinux|ARM64Linux|MIPSLinux|MIPS_little-endian|AVR|EmulatedCortexM3|EmulatedRISCV)$$'
+          - name: test
+            pkgs: .
+            flags: -run '^TestTest$$'
+          - name: rest
+            pkgs: ./builder ./cgo ./compileopts ./compiler ./fix ./interp ./loader ./transform .
+            flags: -skip '^(TestBuild|TestTest)$$'
+    name: assert-test-linux (${{ matrix.shard.name }})
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -267,11 +312,13 @@ jobs:
           tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/qemu/bin" >> "$GITHUB_PATH"
       - uses: ./.github/actions/setup-llvm
+        with:
+          save-cache: "false"
       - name: Get Binaryen revision
         id: binaryen-revision
         run: echo "revision=$(git rev-parse HEAD:lib/binaryen)" >> "$GITHUB_OUTPUT"
-      - name: Cache Binaryen
-        uses: actions/cache@v5
+      - name: Restore Binaryen
+        uses: actions/cache/restore@v5
         id: cache-binaryen
         with:
           key: binaryen-linux-asserts-v2-${{ steps.binaryen-revision.outputs.revision }}
@@ -281,14 +328,19 @@ jobs:
         run: make binaryen
       - run: make gen-device -j4
       - name: Test TinyGo
+        env:
+          GOTESTPKGS: ${{ matrix.shard.pkgs }}
+          GOTESTFLAGS: ${{ matrix.shard.flags }}
         run: make ASSERT=1 test
       - name: Check Go code formatting
+        if: matrix.shard.name == 'rest'
         run: make fmt-check lint
 
   assert-build-linux:
     # Build TinyGo with LLVM assertions enabled and publish it for the jobs
     # below, so that they do not have to build it again. The tarball is not a
     # release file, thus its name does not hold the version.
+    needs: assert-llvm
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -302,8 +354,7 @@ jobs:
           cache: true
       - uses: ./.github/actions/setup-llvm
         with:
-          # assert-test-linux saves the cache. This job only reads it, so that
-          # the two jobs do not write the same key.
+          # assert-llvm saves the cache. This job only reads it.
           save-cache: "false"
       - name: Get Binaryen revision
         id: binaryen-revision
