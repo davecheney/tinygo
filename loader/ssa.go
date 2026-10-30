@@ -1,6 +1,8 @@
 package loader
 
 import (
+	"go/types"
+
 	"golang.org/x/tools/go/ssa"
 )
 
@@ -8,12 +10,10 @@ import (
 //
 // The program must already be parsed and type-checked with the .Parse() method.
 func (p *Program) LoadSSA() *ssa.Program {
-	// TODO: re-enable SanityCheckFunctions after TinyGo-generated SSA passes
-	// sanity checks. compiler/testdata/basic.go's shiftNested currently fails.
-	prog := ssa.NewProgram(p.fset /*ssa.SanityCheckFunctions|*/, ssa.BareInits|ssa.GlobalDebug|ssa.InstantiateGenerics)
+	prog := ssa.NewProgram(p.fset, ssa.SanityCheckFunctions|ssa.BareInits|ssa.GlobalDebug|ssa.InstantiateGenerics)
 
 	for _, pkg := range p.sorted {
-		prog.CreatePackage(pkg.Pkg, pkg.Files, &pkg.info, true)
+		pkg.createSSA(prog)
 	}
 
 	return prog
@@ -24,5 +24,19 @@ func (p *Program) LoadSSA() *ssa.Program {
 // The program must already be parsed and type-checked with the .Parse() method.
 func (p *Package) LoadSSA() *ssa.Package {
 	prog := ssa.NewProgram(p.program.fset, ssa.SanityCheckFunctions|ssa.BareInits|ssa.GlobalDebug)
+	return p.createSSA(prog)
+}
+
+func (p *Package) createSSA(prog *ssa.Program) *ssa.Package {
+	// go/types can leave nonconstant shift counts untyped.
+	// See https://github.com/tinygo-org/tinygo/issues/5496.
+	for expr, tv := range p.info.Types {
+		if tv.IsValue() && tv.Value == nil {
+			if typ := types.Default(tv.Type); typ != tv.Type {
+				tv.Type = typ
+				p.info.Types[expr] = tv
+			}
+		}
+	}
 	return prog.CreatePackage(p.Pkg, p.Files, &p.info, true)
 }
