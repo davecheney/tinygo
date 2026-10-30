@@ -1,0 +1,75 @@
+name: Test timing
+
+on:
+  push:
+    branches:
+      - ci-test-timing
+
+jobs:
+  test-timing:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install apt dependencies
+        run: |
+          echo 'deb https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' | sudo tee /etc/apt/sources.list.d/llvm.list
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+              llvm-22-dev \
+              clang-22 \
+              libclang-22-dev \
+              lld-22 \
+              libgcrypt20 \
+              libpixman-1-0 \
+              libsdl2-2.0-0 \
+              libslirp0 \
+              qemu-system-arm \
+              qemu-system-riscv32 \
+              qemu-user \
+              simavr
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "48.0.2"
+      - name: Setup `wasm-tools`
+        uses: bytecodealliance/actions/wasm-tools/setup@v1
+      - name: Download LLVM source
+        run: make llvm-source
+      - name: Build Binaryen
+        run: make binaryen
+      - run: make gen-device -j4
+      - name: Test TinyGo
+        run: go test -tags=llvm22 -timeout=1h -json . > test.json || true
+      - name: Summarise
+        run: |
+          python3 - <<'EOF'
+          import json
+          tests = {}
+          for line in open("test.json"):
+              try:
+                  e = json.loads(line)
+              except ValueError:
+                  continue
+              if e.get("Action") in ("pass", "fail", "skip") and "Test" in e:
+                  tests[e["Test"]] = (e["Action"], e.get("Elapsed", 0))
+          top = sorted(tests.items(), key=lambda kv: -kv[1][1])
+          for name, (action, elapsed) in top[:80]:
+              print(f"{elapsed:8.1f}s {action:4} {name}")
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-json
+          path: test.json
