@@ -17,6 +17,8 @@ var array = [4]int{
 }
 
 func main() {
+	checkSliceEndPointers()
+
 	l := 5
 	foo := []int{1, 2, 4, 5}
 	bar := make([]int, l-2, l)
@@ -277,6 +279,23 @@ func testSliceBounds() {
 	slicePanics("b[low:max:high]", func() { sliceSink = b[low:max:high] })
 	slicePanics("b[-1:]", func() { sliceSink = b[makeInt(-1):] })
 	slicePanics("b[:-1]", func() { sliceSink = b[:makeInt(-1)] })
+}
+
+func checkSliceEndPointers() {
+	b := make([]byte, makeInt(4096))
+	base := unsafe.SliceData(b)
+	assert(unsafe.SliceData(b[makeInt(len(b)):]) == base)
+	assert(unsafe.SliceData(b[makeInt(4096):makeInt(4096):makeInt(4096)]) == base)
+	assert(unsafe.SliceData(b[makeInt(1):]) == (*byte)(unsafe.Add(unsafe.Pointer(base), 1)))
+	c := b[makeInt(10):makeInt(10)]
+	assert(cap(c) != 0 && unsafe.SliceData(c) == (*byte)(unsafe.Add(unsafe.Pointer(base), 10)))
+
+	a := new([4096]byte)
+	assert(unsafe.SliceData(a[makeInt(len(a)):]) == &a[0])
+
+	s := string(b[:makeInt(100)])
+	assert(unsafe.StringData(s[makeInt(len(s)):]) == unsafe.StringData(s))
+	assert(unsafe.StringData(s[makeInt(3):]) == (*byte)(unsafe.Add(unsafe.Pointer(unsafe.StringData(s)), 3)))
 }
 
 func printslice(name string, s []int) {
