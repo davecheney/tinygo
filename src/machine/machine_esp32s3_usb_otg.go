@@ -323,7 +323,12 @@ func handleUSBIRQ(interrupt.Interrupt) {
 func handleUSBReset() {
 	for ep := uint32(0); ep < otgNumEndpoints; ep++ {
 		otgOutEP(ep).CTL.SetBits(depctlSNAK)
-		otgInEP(ep).CTL.SetBits(depctlSNAK)
+		in := otgInEP(ep)
+		if in.CTL.HasBits(depctlEPENA) {
+			in.CTL.SetBits(depctlSNAK | depctlEPDIS)
+		} else {
+			in.CTL.SetBits(depctlSNAK)
+		}
 		usbRxReady[ep] = false
 	}
 	esp.USB0.DCFG.ClearBits(dcfgDAD_Msk)
