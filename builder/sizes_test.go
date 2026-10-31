@@ -90,11 +90,24 @@ func TestBinarySize(t *testing.T) {
 		{target: "pico2", path: "./testdata/size-contains", opt: "z"},
 		{target: "pico2", path: "./testdata/size-os", opt: "z"},
 		{target: "pico2", path: "./testdata/size-os", opt: "2"},
+		{target: "pico2", path: "./testdata/size-timer", opt: "z"},
+		{target: "pico2", path: "./testdata/size-timer", opt: "2"},
 
 		{target: "cortex-m-qemu", path: "./testdata/size-corpus", opt: "z"},
 		{target: "cortex-m-qemu", path: "./testdata/size-corpus", opt: "2"},
 		{target: "riscv-qemu", path: "./testdata/size-corpus", opt: "z"},
 		{target: "riscv-qemu", path: "./testdata/size-corpus", opt: "2"},
+
+		{target: "cortex-m-qemu", path: "./testdata/size-init-crc", opt: "z"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-crc", opt: "2"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-map", opt: "z"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-map", opt: "2"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-errors", opt: "z"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-errors", opt: "2"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-config", opt: "z"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-config", opt: "2"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-strings", opt: "z"},
+		{target: "cortex-m-qemu", path: "./testdata/size-init-strings", opt: "2"},
 
 		// TODO: also check wasm. Right now this is difficult, because
 		// wasm binaries are run through wasm-opt and therefore the
@@ -319,6 +332,8 @@ func buildBinaryInDir(targetString, pkgName, opt, tmpdir string, trimPath bool) 
 		Debug:                   true,
 		VerifyIR:                true,
 		TrimPath:                trimPath,
+		// The GOROOT string is stored in data, so its length must not depend on the host.
+		GlobalValues: map[string]map[string]string{"runtime": {"goroot": "/usr/local/go"}},
 	}
 	target, err := compileopts.LoadTarget(&options)
 	if err != nil {
