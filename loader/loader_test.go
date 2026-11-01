@@ -17,6 +17,34 @@ import (
 	"github.com/tinygo-org/tinygo/goenv"
 )
 
+func TestPathsToOverride(t *testing.T) {
+	for _, needsSyscall := range []bool{false, true} {
+		t.Run(fmt.Sprintf("syscall=%t", needsSyscall), func(t *testing.T) {
+			paths := pathsToOverride(needsSyscall)
+			for path, wantMerge := range map[string]bool{
+				"crypto/internal/entropy/":        true,
+				"crypto/internal/entropy/v1.0.0/": false,
+				"unicode/":                        true,
+				"unicode/utf8/":                   false,
+			} {
+				if merge, ok := paths[path]; !ok || merge != wantMerge {
+					t.Errorf("override %q = (%t, %t), want (%t, true)", path, merge, ok, wantMerge)
+				}
+			}
+			for path, wantMerge := range map[string]bool{
+				"syscall/":               true,
+				"internal/syscall/":      true,
+				"internal/syscall/unix/": false,
+			} {
+				merge, ok := paths[path]
+				if ok != needsSyscall || ok && merge != wantMerge {
+					t.Errorf("override %q = (%t, %t), want (%t, %t)", path, merge, ok, wantMerge, needsSyscall)
+				}
+			}
+		})
+	}
+}
+
 func TestCGoCompilerFlags(t *testing.T) {
 	dir := t.TempDir()
 	for name, content := range map[string]string{

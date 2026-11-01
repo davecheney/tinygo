@@ -45,7 +45,7 @@ func GetCachedGoroot(config *compileopts.Config) (string, error) {
 	}
 
 	// Find the overrides needed for the goroot.
-	overrides := pathsToOverride(config.GoMinorVersion, needsSyscallPackage(config.BuildTags()))
+	overrides := pathsToOverride(needsSyscallPackage(config.BuildTags()))
 
 	// Resolve the merge links within the goroot.
 	merge, err := listGorootMergeLinks(goroot, tinygoroot, overrides)
@@ -227,7 +227,7 @@ func needsSyscallPackage(buildTags []string) bool {
 
 // The boolean indicates whether to merge the subdirs. True means merge, false
 // means use the TinyGo version.
-func pathsToOverride(goMinor int, needsSyscallPackage bool) map[string]bool {
+func pathsToOverride(needsSyscallPackage bool) map[string]bool {
 	paths := map[string]bool{
 		"":                            true,
 		"crypto/":                     true,
@@ -266,15 +266,13 @@ func pathsToOverride(goMinor int, needsSyscallPackage bool) map[string]bool {
 		"unique/":                     false,
 	}
 
-	if goMinor >= 26 {
-		// Go 1.26 added a CPU jitter entropy source for FIPS 140-3 that
-		// allocates a 32 MiB global buffer (ScratchBuffer [1<<25]byte).
-		// This is fine on systems with virtual memory, but causes RAM
-		// overflow on microcontrollers. Replace with a zero-size stub
-		// since TinyGo targets never use FIPS jitter entropy.
-		paths["crypto/internal/entropy/"] = true
-		paths["crypto/internal/entropy/v1.0.0/"] = false
-	}
+	// Go 1.26 added a CPU jitter entropy source for FIPS 140-3 that
+	// allocates a 32 MiB global buffer (ScratchBuffer [1<<25]byte).
+	// This is fine on systems with virtual memory, but causes RAM
+	// overflow on microcontrollers. Replace with a zero-size stub
+	// since TinyGo targets never use FIPS jitter entropy.
+	paths["crypto/internal/entropy/"] = true
+	paths["crypto/internal/entropy/v1.0.0/"] = false
 
 	if needsSyscallPackage {
 		paths["syscall/"] = true // include syscall/js
@@ -282,14 +280,12 @@ func pathsToOverride(goMinor int, needsSyscallPackage bool) map[string]bool {
 		paths["internal/syscall/unix/"] = false
 	}
 
-	if goMinor >= 26 {
-		// Go 1.26 added SWAR optimizations to unicode/utf8 that use
-		// constants assuming at least 32-bit uintptr. TinyGo supports
-		// 16-bit targets (AVR) where these constants overflow, so we
-		// provide a patched version.
-		paths["unicode/"] = true
-		paths["unicode/utf8/"] = false
-	}
+	// Go 1.26 added SWAR optimizations to unicode/utf8 that use
+	// constants assuming at least 32-bit uintptr. TinyGo supports
+	// 16-bit targets (AVR) where these constants overflow, so we
+	// provide a patched version.
+	paths["unicode/"] = true
+	paths["unicode/utf8/"] = false
 
 	return paths
 }
