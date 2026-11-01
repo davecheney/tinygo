@@ -18,7 +18,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"math/big"
 	"slices"
@@ -35,8 +34,8 @@ import (
 // llvmLayoutType is not necessarily a complete type: it may need to be
 // repeated (for example, for a slice value).
 //
-// Objects are copied in a memory view when they are stored to, to provide the
-// ability to roll back interpreting a function.
+// Objects are changed in place. The old state is saved in an undo log first,
+// to provide the ability to roll back interpreting a function.
 type object struct {
 	llvmGlobal     llvm.Value
 	llvmType       llvm.Type // must match llvmGlobal.GlobalValueType() if both are set, may be unset if llvmGlobal is set
@@ -49,24 +48,18 @@ type object struct {
 	marked         uint8     // 0 means unmarked, 1 means external read, 2 means external write
 }
 
-// clone() returns a cloned version of this object, for when an object needs to
-// be written to for example.
-func (obj object) clone() object {
-	if obj.buffer != nil {
-		obj.buffer = obj.buffer.clone()
-	}
-	return obj
-}
-
-// A memoryView is bound to a function activation. Loads are done from this view
-// or a parent view (up to the *runner if it isn't included in a view). Stores
-// copy the object to the current view.
+// A memoryView is bound to a function activation. Loads and stores use the
+// objects in the *runner directly. Every change first saves the old state in
+// the undo log of the runner, so that the view can be reverted.
 //
 // For details, see the README in the package.
 type memoryView struct {
-	r       *runner
-	parent  *memoryView
-	objects map[uint32]object
+	r      *runner
+	parent *memoryView
+
+	// undoStart is the length of the undo log when this view was created.
+	// Entries from undoStart onwards are changes made in this view.
+	undoStart int
 
 	// These instructions were added to runtime.initAll while interpreting a
 	// function. They are stored here in a list so they can be removed if the
@@ -79,11 +72,29 @@ type memoryView struct {
 // the parent, in which case all changed objects should be included in this
 // memory view.
 func (mv *memoryView) extend(sub memoryView) {
-	if mv.objects == nil && len(sub.objects) != 0 {
-		mv.objects = make(map[uint32]object)
-	}
-	maps.Copy(mv.objects, sub.objects)
 	mv.instructions = append(mv.instructions, sub.instructions...)
+}
+
+// An undoEntry saves the state of an object before a change.
+type undoEntry struct {
+	index  uint32
+	offset uint32
+	bytes  []uint64 // old bytes at offset, or nil if obj holds the old object
+	obj    object
+}
+
+// newView returns a memory view whose changes can be reverted separately.
+func (r *runner) newView(parent *memoryView) memoryView {
+	return memoryView{r: r, parent: parent, undoStart: len(r.undo)}
+}
+
+// commit keeps the changes of a root view and frees its undo log.
+func (mv *memoryView) commit() {
+	if checks && mv.parent != nil {
+		panic("interp: commit of a view with a parent")
+	}
+	clear(mv.r.undo[mv.undoStart:])
+	mv.r.undo = mv.r.undo[:mv.undoStart]
 }
 
 // revert undoes changes done in this memory view: it removes all instructions
@@ -100,6 +111,18 @@ func (mv *memoryView) revert() {
 		}
 		llvmInst.EraseFromParentAsInstruction()
 	}
+	// Undo changes to objects in reverse order.
+	undo := mv.r.undo[mv.undoStart:]
+	for _, entry := range slices.Backward(undo) {
+		if entry.bytes == nil {
+			mv.r.objects[entry.index] = entry.obj
+		} else {
+			buf := mv.r.objects[entry.index].buffer.(rawValue).buf
+			copy(buf[entry.offset:], entry.bytes)
+		}
+	}
+	clear(undo)
+	mv.r.undo = mv.r.undo[:mv.undoStart]
 }
 
 // markExternalLoad marks the given LLVM value as having an external read. That
@@ -134,12 +157,8 @@ func (mv *memoryView) markExternal(llvmValue llvm.Value, mark uint8) error {
 		objectIndex := mv.r.getValue(llvmValue).(pointerValue).index()
 		obj := mv.get(objectIndex)
 		if obj.marked < mark {
-			obj = obj.clone()
 			obj.marked = mark
-			if mv.objects == nil {
-				mv.objects = make(map[uint32]object)
-			}
-			mv.objects[objectIndex] = obj
+			mv.set(objectIndex, obj)
 			if !llvmValue.IsAGlobalVariable().IsNil() {
 				initializer := llvmValue.Initializer()
 				if !initializer.IsNil() {
@@ -255,40 +274,41 @@ func (mv *memoryView) hasExternalStore(v pointerValue) bool {
 	return obj.marked >= 2 && !obj.constant
 }
 
-// get returns an object that can only be read from, as it may return an object
-// of a parent view.
+// get returns the current state of an object. Its buffer may change in place
+// on a later store, so callers must not keep it.
 func (mv *memoryView) get(index uint32) object {
-	if obj, ok := mv.objects[index]; ok {
-		return obj
-	}
-	if mv.parent != nil {
-		return mv.parent.get(index)
-	}
 	return mv.r.objects[index]
 }
 
-// getWritable returns an object that can be written to.
-func (mv *memoryView) getWritable(index uint32) object {
-	if obj, ok := mv.objects[index]; ok {
-		// Object is already in the current memory view, so can be modified.
-		return obj
-	}
-	// Object is not currently in this view. Get it, and clone it for use.
-	obj := mv.get(index).clone()
-	if mv.objects == nil {
-		mv.objects = make(map[uint32]object)
-	}
-	mv.objects[index] = obj
-	return obj
+// set replaces the object, saving the old object in the undo log.
+func (mv *memoryView) set(index uint32, obj object) {
+	mv.r.undo = append(mv.r.undo, undoEntry{index: index, obj: mv.r.objects[index]})
+	mv.r.objects[index] = obj
 }
 
-// Replace the object (indicated with index) with the given object. This put is
-// only done at the current memory view, so that if this memory view is reverted
-// the object is not changed.
-func (mv *memoryView) put(index uint32, obj object) {
-	if mv.objects == nil {
-		mv.objects = make(map[uint32]object)
+// writableBytes returns n bytes of the object buffer at offset, which can be
+// changed in place. The old bytes are saved in the undo log.
+func (mv *memoryView) writableBytes(index, offset, n uint32) []uint64 {
+	obj := mv.r.objects[index]
+	if checks && obj.constant {
+		panic("interp: store to a constant")
 	}
+	raw, ok := obj.buffer.(rawValue)
+	if !ok {
+		raw = obj.buffer.asRawValue(mv.r)
+		obj.buffer = raw
+		mv.set(index, obj)
+	} else {
+		old := slices.Clone(raw.buf[offset : offset+n])
+		mv.r.undo = append(mv.r.undo, undoEntry{index: index, offset: offset, bytes: old})
+	}
+	return raw.buf[offset : offset+n]
+}
+
+// Replace the object (indicated with index) with the given object. The old
+// object is saved, so that if this memory view is reverted the object is not
+// changed.
+func (mv *memoryView) put(index uint32, obj object) {
 	if checks && mv.get(index).buffer == nil {
 		panic("writing to external object")
 	}
@@ -298,7 +318,7 @@ func (mv *memoryView) put(index uint32, obj object) {
 	if checks && obj.constant {
 		panic("interp: store to a constant")
 	}
-	mv.objects[index] = obj
+	mv.set(index, obj)
 }
 
 // Load the value behind the given pointer. Returns nil if the pointer points to
@@ -324,25 +344,9 @@ func (mv *memoryView) load(p pointerValue, size uint32) value {
 		// runtime instead of crashing the compiler.
 		return nil
 	}
+	// A later store may change the buffer in place, so copy the loaded bytes.
 	v := obj.buffer.asRawValue(mv.r)
-	loadedBuf := v.buf[p.offset() : p.offset()+size]
-	if mv.owned(p.index()) {
-		// A store in an owning view may change the buffer in place, so copy
-		// the slice to keep the loaded value independent of it.
-		loadedBuf = slices.Clone(loadedBuf)
-	}
-	return rawValue{buf: loadedBuf}
-}
-
-// owned reports whether this view or a parent view holds the object, so that a
-// store in that view may change its buffer in place.
-func (mv *memoryView) owned(index uint32) bool {
-	for v := mv; v != nil; v = v.parent {
-		if _, ok := v.objects[index]; ok {
-			return true
-		}
-	}
-	return false
+	return rawValue{buf: slices.Clone(v.buf[p.offset() : p.offset()+size])}
 }
 
 // Store to the value behind the given pointer. This overwrites the value in the
@@ -354,14 +358,7 @@ func (mv *memoryView) store(v value, p pointerValue) bool {
 		panic("interp: store to object with external load/store")
 	}
 	index := p.index()
-	var obj object
-	writable := false
-	if mv.objects != nil {
-		obj, writable = mv.objects[index]
-	}
-	if !writable {
-		obj = mv.get(index)
-	}
+	obj := mv.get(index)
 	if obj.buffer == nil {
 		// External global, return false (for a failure).
 		return false
@@ -372,18 +369,10 @@ func (mv *memoryView) store(v value, p pointerValue) bool {
 	}
 	if p.offset() == 0 && valueLen == obj.buffer.len(mv.r) {
 		obj.buffer = v.clone()
-	} else {
-		if !writable {
-			obj = obj.clone()
-		}
-		buffer := obj.buffer.asRawValue(mv.r)
-		obj.buffer = buffer
-		v := v.asRawValue(mv.r)
-		for i := range valueLen {
-			buffer.buf[p.offset()+i] = v.buf[i]
-		}
+		mv.put(index, obj)
+		return true // success
 	}
-	mv.put(index, obj)
+	copy(mv.writableBytes(index, p.offset(), valueLen), v.asRawValue(mv.r).buf)
 	return true // success
 }
 

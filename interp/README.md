@@ -79,19 +79,20 @@ while objects represent the backing storage (like LLVM globals). Some values
 are pointer values, and point to an object.
 
 Importantly, this partial evaluator can roll back the execution of a
-function. This is implemented by creating a new memory view per function
-activation, which makes sure that any change to a global (such as a store
-instruction) is stored in the memory view. It creates a copy of the object
-and stores that in the memory view to be modified. Once the function has
-executed successfully, all these modified objects are then copied into the
-parent function, up to the root function invocation which (on successful
-execution) writes the values back into the LLVM module. This way, function
-invocations can be rolled back without leaving a trace.
+function. Every change to an object (such as a store instruction) is made in
+place, but first the old bytes, or the old object, are saved in an undo log.
+A new memory view is created per function activation, which remembers where
+its part of the undo log starts. If the function fails, the view applies its
+part of the log in reverse order to restore the objects. If the function
+succeeds, its part of the log simply becomes part of the parent view, up to
+the root function invocation which (on successful execution) drops the log
+and writes the values back into the LLVM module. This way, function
+invocations can be rolled back without leaving a trace, and a store only
+costs as much as the bytes it changes.
 
 Pointer values point to memory objects, but not to a particular memory
 object. Every memory object is given an index, and pointers use that index to
-look up the current active object for the pointer to load from or to copy
-when storing to it.
+look up the current object for the pointer to load from or to store to.
 
 Rolling back a function should roll back everything, including the few
 instructions emitted at runtime. This is done by treating instructions much

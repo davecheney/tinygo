@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ type runner struct {
 	pkgName           string                   // package name of the currently executing package
 	functionCache     map[llvm.Value]*function // cache of compiled functions
 	objects           []object                 // slice of objects in memory
+	undo              []undoEntry              // undo log for objects, see memoryView
 	globals           map[llvm.Value]int       // map from global to index in objects slice
 	start             time.Time
 	timeout           time.Duration
@@ -151,15 +153,15 @@ func Run(mod llvm.Module, timeout time.Duration, maxLoopIterations int, debug bo
 			}
 			return callErr.materialize()
 		}
-		for index, obj := range mem.objects {
-			r.objects[index] = obj
-		}
+		mem.commit()
 	}
 	r.pkgName = ""
 
 	// Update all global variables in the LLVM module.
-	mem := memoryView{r: r}
-	for i, obj := range r.objects {
+	// Globals created below are added to r.objects, but already have an
+	// initializer, so loop over the objects as they were before.
+	mem := r.newView(nil)
+	for i, obj := range slices.Clone(r.objects) {
 		if obj.llvmGlobal.IsNil() {
 			continue
 		}
@@ -259,13 +261,12 @@ func RunFunc(fn llvm.Value, timeout time.Duration, maxLoopIterations int, debug 
 		}
 		return callErr.materialize()
 	}
-	for index, obj := range pkgMem.objects {
-		r.objects[index] = obj
-	}
+	pkgMem.commit()
 
 	// Update globals with values determined while running the initializer above.
-	mem := memoryView{r: r}
-	for _, obj := range r.objects {
+	// See the comment in Run.
+	mem := r.newView(nil)
+	for _, obj := range slices.Clone(r.objects) {
 		if obj.llvmGlobal.IsNil() {
 			continue
 		}
@@ -314,16 +315,12 @@ func (r *runner) getFunction(llvmFn llvm.Value) *function {
 // variable. By marking this function as being run at runtime, that load
 // instruction will need to be run at runtime instead of at compile time.
 func (r *runner) markExternalLoad(llvmValue llvm.Value) error {
-	mem := memoryView{r: r}
+	mem := r.newView(nil)
 	err := mem.markExternalLoad(llvmValue)
 	if err != nil {
 		return err
 	}
-	for index, obj := range mem.objects {
-		if obj.marked > r.objects[index].marked {
-			r.objects[index].marked = obj.marked
-		}
-	}
+	mem.commit()
 	return nil
 }
 

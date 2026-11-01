@@ -21,7 +21,7 @@ import (
 const DefaultMaxInterpBlockEntries = 1000
 
 func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent string) (value, memoryView, *Error) {
-	mem := memoryView{r: r, parent: parentMem}
+	mem := r.newView(parentMem)
 	locals := make([]value, len(fn.locals))
 	r.callsExecuted++
 
@@ -559,7 +559,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 						continue
 					}
 					srcObj := mem.get(src.index())
-					dstObj := mem.getWritable(dst.index())
+					dstObj := mem.get(dst.index())
 					if srcObj.buffer == nil || dstObj.buffer == nil {
 						// If the buffer is nil, it means the memory is external.
 						// This can happen for example when copying data out of
@@ -572,11 +572,8 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 						}
 						continue
 					}
-					dstBuf := dstObj.buffer.asRawValue(r)
 					srcBuf := srcObj.buffer.asRawValue(r)
-					copy(dstBuf.buf[dst.offset():][:nBytes], srcBuf.buf[src.offset():][:nBytes])
-					dstObj.buffer = dstBuf
-					mem.put(dst.index(), dstObj)
+					copy(mem.writableBytes(dst.index(), dst.offset(), uint32(nBytes)), srcBuf.buf[src.offset():][:nBytes])
 				}
 			case callFn.name == "runtime.typeAssert":
 				// This function must be implemented manually as it is normally
