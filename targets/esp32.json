@@ -20,6 +20,7 @@
 	"linkerscript": "targets/esp32.ld",
 	"extra-files": [
 		"src/device/esp/esp32.S",
+		"targets/esp32-malloc-wrap.c",
 		"targets/esp32-interrupts.S",
 		"src/internal/task/task_stack_esp32.S"
 	],
