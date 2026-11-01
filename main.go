@@ -1815,6 +1815,7 @@ func main() {
 	ldflags := flag.String("ldflags", "", "Go link tool compatible ldflags")
 	llvmFeatures := flag.String("llvm-features", "", "comma separated LLVM features to enable")
 	cpuprofile := flag.String("cpuprofile", "", "cpuprofile output")
+	memprofile := flag.String("memprofile", "", "memprofile output")
 	monitor := flag.Bool("monitor", false, "enable serial monitor")
 	baudrate := flag.Int("baudrate", 115200, "baudrate of serial monitor")
 	gocompatibility := flag.Bool("go-compatibility", true, "enable to check for Go versions compatibility, you can also configure this by setting the TINYGO_GOCOMPATIBILITY environment variable")
@@ -1988,6 +1989,21 @@ func main() {
 			os.Exit(1)
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "could not create memory profile: ", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		defer func() {
+			runtime.GC()
+			if err := pprof.Lookup("allocs").WriteTo(f, 0); err != nil {
+				fmt.Fprintln(os.Stderr, "could not write memory profile: ", err)
+			}
+		}()
 	}
 
 	switch command {
