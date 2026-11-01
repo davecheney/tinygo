@@ -1,0 +1,82 @@
+name: Test timing
+on:
+  push:
+    branches:
+      - davecheney-ci-test-timing
+jobs:
+  assert-test-linux:
+    # Run all tests that can run on Linux, with LLVM assertions enabled to catch
+    # potential bugs.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install apt dependencies
+        run: |
+          echo "Show cpuinfo; sometimes useful when troubleshooting"
+          cat /proc/cpuinfo
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+              libgcrypt20 \
+              libpixman-1-0 \
+              libsdl2-2.0-0 \
+              libslirp0 \
+              qemu-system-arm \
+              qemu-system-riscv32 \
+              qemu-user \
+              simavr
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+        with:
+          version: "48.0.2"
+      - name: Setup `wasm-tools`
+        uses: bytecodealliance/actions/wasm-tools/setup@v1
+      - name: Install Espressif QEMU
+        run: |
+          release=esp-develop-9.2.2-20260417
+          archive=qemu-xtensa-softmmu-${release//-/_}-x86_64-linux-gnu.tar.xz
+          curl -fL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/espressif/qemu/releases/download/$release/$archive"
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/qemu/bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/setup-llvm
+      - name: Get Binaryen revision
+        id: binaryen-revision
+        run: echo "revision=$(git rev-parse HEAD:lib/binaryen)" >> "$GITHUB_OUTPUT"
+      - name: Cache Binaryen
+        uses: actions/cache@v5
+        id: cache-binaryen
+        with:
+          key: binaryen-linux-asserts-v2-${{ steps.binaryen-revision.outputs.revision }}
+          path: build/wasm-opt
+      - name: Build Binaryen
+        if: steps.cache-binaryen.outputs.cache-hit != 'true'
+        run: make binaryen
+      - run: make gen-device -j4
+      - name: Test TinyGo
+        run: |
+          set -o pipefail
+          make ASSERT=1 test GOTESTFLAGS=-json | tee test.json | jq -rR 'fromjson? | select(.Action=="fail" or (.Action=="output" and (.Output|test("^(ok|FAIL)\\s")))) | .Output // "FAIL \(.Package) \(.Test)"'
+      - name: Slowest tests
+        if: ${{ !cancelled() }}
+        run: |
+          jq -rR 'fromjson? | select(.Action=="pass" or .Action=="fail") | select(.Test) | [.Elapsed, .Action, .Package, .Test] | @tsv' test.json | sort -rn | head -100 | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload test JSON
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-json
+          path: test.json
+      - name: Check Go code formatting after device generation
+        run: make fmt-check
