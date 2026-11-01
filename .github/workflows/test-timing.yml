@@ -64,10 +64,30 @@ jobs:
         if: steps.cache-binaryen.outputs.cache-hit != 'true'
         run: make binaryen
       - run: make gen-device -j4
+      - name: Get TinyGo library cache key
+        id: libkey
+        run: echo "sha=$(git ls-tree HEAD lib/bdwgc lib/mingw-w64 lib/musl lib/picolibc lib/wasi-libc | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Restore TinyGo library cache
+        id: cache-libs
+        uses: actions/cache/restore@v5
+        with:
+          key: tinygo-libs-linux-asserts-v1-${{ steps.libkey.outputs.sha }}-${{ hashFiles('llvm-version.txt', 'builder/*.go', 'compileopts/*.go', 'targets/*.json') }}
+          path: ~/.cache/tinygo
       - name: Test TinyGo
         run: |
           set -o pipefail
           make ASSERT=1 test GOTESTFLAGS=-json | tee test.json | jq -rR 'fromjson? | select(.Action=="fail" or (.Action=="output" and (.Output|test("^(ok|FAIL)\\s")))) | .Output // "FAIL \(.Package) \(.Test)"'
+      - name: Save TinyGo library cache
+        if: ${{ !cancelled() && steps.cache-libs.outputs.cache-hit != 'true' }}
+        run: |
+          find ~/.cache/tinygo -maxdepth 1 -type f -delete
+          du -sh ~/.cache/tinygo
+          ls ~/.cache/tinygo
+      - if: ${{ !cancelled() && steps.cache-libs.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ steps.cache-libs.outputs.cache-primary-key }}
+          path: ~/.cache/tinygo
       - name: Slowest tests
         if: ${{ !cancelled() }}
         run: |
