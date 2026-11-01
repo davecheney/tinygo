@@ -308,11 +308,24 @@ typedef struct {
 
 
 // https://github.com/raspberrypi/pico-sdk
-// src/rp2_common/hardware_xip_cache/include/hardware/xip_cache.h
+// src/rp2_common/hardware_xip_cache/xip_cache.c
 
-// Noop unless using XIP Cache-as-SRAM
-// Non-noop version in src/rp2_common/hardware_xip_cache/xip_cache.c
-static inline void xip_cache_clean_all(void) {}
+#define XIP_END              0x14000000
+#define XIP_MAINTENANCE_BASE 0x18000000
+#define XIP_CACHE_LINE_SIZE  8
+#define XIP_CACHE_SIZE       (16 * 1024)
+#define XIP_CACHE_CLEAN_BY_SET_WAY 1
+
+typedef volatile uint8_t io_wo_8;
+
+// Write back dirty lines, such as PSRAM writes, before a flash operation flushes the cache.
+// Uses offsets outside the QMI address range to work around RP2350-E11.
+static inline __attribute__((always_inline)) void xip_cache_clean_all(void) {
+    for (uintptr_t offset = XIP_END - XIP_BASE - XIP_CACHE_SIZE; offset < XIP_END - XIP_BASE; offset += XIP_CACHE_LINE_SIZE) {
+        *(io_wo_8 *)(XIP_MAINTENANCE_BASE + offset + XIP_CACHE_CLEAN_BY_SET_WAY) = 0;
+    }
+    pico_default_asm_volatile("dsb\nisb" : : : "memory");
+}
 
 
 // https://github.com/raspberrypi/pico-sdk
