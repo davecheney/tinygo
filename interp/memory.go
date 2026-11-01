@@ -79,10 +79,17 @@ type memoryView struct {
 // the parent, in which case all changed objects should be included in this
 // memory view.
 func (mv *memoryView) extend(sub memoryView) {
-	if mv.objects == nil && len(sub.objects) != 0 {
-		mv.objects = make(map[uint32]object)
+	if len(sub.objects) > len(mv.objects) {
+		// Keep the larger map. Objects in sub are newer than those in mv.
+		for index, obj := range mv.objects {
+			if _, ok := sub.objects[index]; !ok {
+				sub.objects[index] = obj
+			}
+		}
+		mv.objects = sub.objects
+	} else {
+		maps.Copy(mv.objects, sub.objects)
 	}
-	maps.Copy(mv.objects, sub.objects)
 	mv.instructions = append(mv.instructions, sub.instructions...)
 }
 
