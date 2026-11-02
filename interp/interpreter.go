@@ -513,8 +513,8 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 					return nil, mem, r.errorAt(inst, err)
 				}
 				buf := newRawValue(uint32(nBytes))
-				for i := range buf.buf {
-					buf.buf[i] = fill
+				for i := range uint32(nBytes) {
+					buf.setSlot(i, fill)
 				}
 				mem.store(buf, dst)
 			case strings.HasPrefix(callFn.name, "llvm.memcpy.p0") || strings.HasPrefix(callFn.name, "llvm.memmove.p0"):
@@ -574,7 +574,8 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 					}
 					dstBuf := dstObj.buffer.asRawValue(r)
 					srcBuf := srcObj.buffer.asRawValue(r)
-					copy(dstBuf.buf[dst.offset():][:nBytes], srcBuf.buf[src.offset():][:nBytes])
+					n := uint32(nBytes)
+					dstBuf.slice(dst.offset(), dst.offset()+n).copyFrom(srcBuf.slice(src.offset(), src.offset()+n))
 					dstObj.buffer = dstBuf
 					mem.put(dst.index(), dstObj)
 				}
@@ -870,9 +871,7 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 			agg := operands[0].asRawValue(r)
 			offset := operands[1].(literalValue).value.(uint64)
 			size := operands[2].(literalValue).value.(uint64)
-			elt := rawValue{
-				buf: agg.buf[offset : offset+size],
-			}
+			elt := agg.slice(uint32(offset), uint32(offset+size))
 			if r.debug {
 				fmt.Fprintln(os.Stderr, indent+"extractvalue:", operands, "->", elt)
 			}
@@ -880,10 +879,9 @@ func (r *runner) run(fn *function, params []value, parentMem *memoryView, indent
 		case llvm.InsertValue:
 			agg := operands[0].asRawValue(r)
 			elt := operands[1].asRawValue(r)
-			offset := int(operands[2].(literalValue).value.(uint64))
-			newagg := newRawValue(uint32(len(agg.buf)))
-			copy(newagg.buf, agg.buf)
-			copy(newagg.buf[offset:], elt.buf)
+			offset := uint32(operands[2].(literalValue).value.(uint64))
+			newagg := agg.cloneRaw()
+			newagg.slice(offset, newagg.len(r)).copyFrom(elt)
 			if r.debug {
 				fmt.Fprintln(os.Stderr, indent+"insertvalue:", operands, "->", newagg)
 			}

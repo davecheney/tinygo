@@ -324,14 +324,13 @@ func (mv *memoryView) load(p pointerValue, size uint32) value {
 		// runtime instead of crashing the compiler.
 		return nil
 	}
-	v := obj.buffer.asRawValue(mv.r)
-	loadedBuf := v.buf[p.offset() : p.offset()+size]
+	loaded := obj.buffer.asRawValue(mv.r).slice(p.offset(), p.offset()+size)
 	if mv.owned(p.index()) {
 		// A store in an owning view may change the buffer in place, so copy
 		// the slice to keep the loaded value independent of it.
-		loadedBuf = slices.Clone(loadedBuf)
+		return loaded.cloneRaw()
 	}
-	return rawValue{buf: loadedBuf}
+	return loaded
 }
 
 // owned reports whether this view or a parent view holds the object, so that a
@@ -378,10 +377,7 @@ func (mv *memoryView) store(v value, p pointerValue) bool {
 		}
 		buffer := obj.buffer.asRawValue(mv.r)
 		obj.buffer = buffer
-		v := v.asRawValue(mv.r)
-		for i := range valueLen {
-			buffer.buf[p.offset()+i] = v.buf[i]
-		}
+		buffer.slice(p.offset(), p.offset()+valueLen).copyFrom(v.asRawValue(mv.r))
 	}
 	mv.put(index, obj)
 	return true // success
@@ -471,9 +467,7 @@ func (v literalValue) asRawValue(r *runner) rawValue {
 		panic("unknown value type")
 	}
 	raw := newRawValue(uint32(len(buf)))
-	for i, b := range buf {
-		raw.buf[i] = uint64(b)
-	}
+	raw.setBytes(0, buf)
 	return raw
 }
 
@@ -584,9 +578,7 @@ func (v pointerValue) asPointer(r *runner) (pointerValue, error) {
 
 func (v pointerValue) asRawValue(r *runner) rawValue {
 	rv := newRawValue(r.pointerSize)
-	for i := range rv.buf {
-		rv.buf[i] = v.pointer
-	}
+	rv.setPointer(v, r.pointerSize)
 	return rv
 }
 
@@ -720,23 +712,75 @@ func newRawValue(size uint32) rawValue {
 	return rawValue{make([]uint64, size)}
 }
 
+// The methods from here to copyFrom are the only ones that use buf directly.
+
 func (v rawValue) len(r *runner) uint32 {
 	return uint32(len(v.buf))
 }
 
+// slot returns the byte at index i, or the pointer stored there if the value
+// is larger than 255.
+func (v rawValue) slot(i uint32) uint64 {
+	return v.buf[i]
+}
+
+// setSlot sets the byte or pointer at index i.
+func (v rawValue) setSlot(i uint32, x uint64) {
+	v.buf[i] = x
+}
+
+// slice returns the part of v from start to end, which shares memory with v.
+func (v rawValue) slice(start, end uint32) rawValue {
+	return rawValue{v.buf[start:end]}
+}
+
+// cloneRaw returns a copy of v that does not share memory with it.
+func (v rawValue) cloneRaw() rawValue {
+	return rawValue{slices.Clone(v.buf)}
+}
+
+func (v rawValue) clone() value {
+	return v.cloneRaw()
+}
+
+// copyFrom copies src to the start of v, like the copy builtin.
+func (v rawValue) copyFrom(src rawValue) {
+	copy(v.buf, src.buf)
+}
+
+// setBytes stores b at offset.
+func (v rawValue) setBytes(offset uint32, b []byte) {
+	for i, c := range b {
+		v.setSlot(offset+uint32(i), uint64(c))
+	}
+}
+
+// setPointer stores ptr in the first size slots of v.
+func (v rawValue) setPointer(ptr pointerValue, size uint32) {
+	for i := range size {
+		v.setSlot(i, ptr.pointer)
+	}
+}
+
+// isPointer returns true if the slot at index i holds a pointer.
+func (v rawValue) isPointer(i uint32) bool {
+	return v.slot(i) > 255
+}
+
 func (v rawValue) String() string {
-	if len(v.buf) == 2 || len(v.buf) == 4 || len(v.buf) == 8 {
+	n := v.len(nil)
+	if n == 2 || n == 4 || n == 8 {
 		// Format as a pointer if the entire buf is this pointer.
-		if v.buf[0] > 255 {
+		if v.isPointer(0) {
 			isPointer := true
-			for _, p := range v.buf {
-				if p != v.buf[0] {
+			for i := range n {
+				if v.slot(i) != v.slot(0) {
 					isPointer = false
 					break
 				}
 			}
 			if isPointer {
-				return pointerValue{v.buf[0]}.String()
+				return pointerValue{v.slot(0)}.String()
 			}
 		}
 		// Format as number if none of the buf is a pointer.
@@ -750,22 +794,15 @@ func (v rawValue) String() string {
 			return strconv.FormatInt(n, 10)
 		}
 	}
-	return "<[…" + strconv.Itoa(len(v.buf)) + "]>"
-}
-
-func (v rawValue) clone() value {
-	newValue := v
-	newValue.buf = make([]uint64, len(v.buf))
-	copy(newValue.buf, v.buf)
-	return newValue
+	return "<[…" + strconv.Itoa(int(n)) + "]>"
 }
 
 func (v rawValue) asPointer(r *runner) (pointerValue, error) {
-	if v.buf[0] <= 255 {
+	if !v.isPointer(0) {
 		// Probably a null pointer or memory-mapped I/O.
 		return pointerValue{}, errIntegerAsPointer
 	}
-	return pointerValue{v.buf[0]}, nil
+	return pointerValue{v.slot(0)}, nil
 }
 
 func (v rawValue) asRawValue(r *runner) rawValue {
@@ -773,12 +810,12 @@ func (v rawValue) asRawValue(r *runner) rawValue {
 }
 
 func (v rawValue) bytes() ([]byte, error) {
-	buf := make([]byte, len(v.buf))
-	for i, p := range v.buf {
-		if p > 255 {
+	buf := make([]byte, v.len(nil))
+	for i := range buf {
+		if v.isPointer(uint32(i)) {
 			return nil, errUnsupportedInst
 		}
-		buf[i] = byte(p)
+		buf[i] = byte(v.slot(uint32(i)))
 	}
 	return buf, nil
 }
@@ -789,7 +826,7 @@ func (v rawValue) Uint(r *runner) (uint64, error) {
 		return 0, err
 	}
 
-	switch len(v.buf) {
+	switch v.len(r) {
 	case 1:
 		return uint64(buf[0]), nil
 	case 2:
@@ -808,7 +845,7 @@ func (v rawValue) Int(r *runner) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	switch len(v.buf) {
+	switch v.len(r) {
 	case 1:
 		return int64(int8(n)), nil
 	case 2:
@@ -824,11 +861,11 @@ func (v rawValue) Int(r *runner) (int64, error) {
 
 // equal returns true if (and only if) the value matches rhs.
 func (v rawValue) equal(rhs rawValue) bool {
-	if len(v.buf) != len(rhs.buf) {
+	if v.len(nil) != rhs.len(nil) {
 		panic("comparing values of different size")
 	}
-	for i, p := range v.buf {
-		if rhs.buf[i] != p {
+	for i := range v.len(nil) {
+		if rhs.slot(i) != v.slot(i) {
 			return false
 		}
 	}
@@ -860,10 +897,10 @@ func (v rawValue) rawLLVMValue(mem *memoryView) (llvm.Value, error) {
 	}
 
 	// Create structFields, converting the rawValue to a LLVM value.
-	for i := uint32(0); i < uint32(len(v.buf)); {
-		if v.buf[i] > 255 {
+	for i := uint32(0); i < v.len(mem.r); {
+		if v.isPointer(i) {
 			addBytes()
-			field, err := pointerValue{v.buf[i]}.toLLVMValue(llvm.Type{}, mem)
+			field, err := pointerValue{v.slot(i)}.toLLVMValue(llvm.Type{}, mem)
 			if err != nil {
 				return llvm.Value{}, err
 			}
@@ -871,7 +908,7 @@ func (v rawValue) rawLLVMValue(mem *memoryView) (llvm.Value, error) {
 			i += mem.r.pointerSize
 			continue
 		}
-		val := llvm.ConstInt(int8Type, uint64(v.buf[i]), false)
+		val := llvm.ConstInt(int8Type, v.slot(i), false)
 		bytesBuf = append(bytesBuf, val)
 		i++
 	}
@@ -886,8 +923,8 @@ func (v rawValue) rawLLVMValue(mem *memoryView) (llvm.Value, error) {
 
 func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, error) {
 	isZero := true
-	for _, p := range v.buf {
-		if p != 0 {
+	for i := range v.len(mem.r) {
+		if v.slot(i) != 0 {
 			isZero = false
 			break
 		}
@@ -897,7 +934,7 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 	}
 	switch llvmType.TypeKind() {
 	case llvm.IntegerTypeKind:
-		if v.buf[0] > 255 {
+		if v.isPointer(0) {
 			ptr, err := v.asPointer(mem.r)
 			if err != nil {
 				panic(err)
@@ -918,15 +955,15 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 		var err error
 		switch llvmType.IntTypeWidth() {
 		case 64:
-			n, err = rawValue{v.buf[:8]}.Uint(mem.r)
+			n, err = v.slice(0, 8).Uint(mem.r)
 		case 32:
-			n, err = rawValue{v.buf[:4]}.Uint(mem.r)
+			n, err = v.slice(0, 4).Uint(mem.r)
 		case 16:
-			n, err = rawValue{v.buf[:2]}.Uint(mem.r)
+			n, err = v.slice(0, 2).Uint(mem.r)
 		case 8:
-			n = uint64(v.buf[0])
+			n = v.slot(0)
 		case 1:
-			n = uint64(v.buf[0])
+			n = v.slot(0)
 			if n != 0 && n != 1 {
 				panic("bool must be 0 or 1")
 			}
@@ -941,10 +978,8 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 		fieldTypes := llvmType.StructElementTypes()
 		fields := make([]llvm.Value, len(fieldTypes))
 		for i, fieldType := range fieldTypes {
-			offset := mem.r.targetData.ElementOffset(llvmType, i)
-			field := rawValue{
-				buf: v.buf[offset : offset+mem.r.targetData.TypeStoreSize(fieldType)],
-			}
+			offset := uint32(mem.r.targetData.ElementOffset(llvmType, i))
+			field := v.slice(offset, offset+uint32(mem.r.targetData.TypeStoreSize(fieldType)))
 			var err error
 			fields[i], err = field.toLLVMValue(fieldType, mem)
 			if err != nil {
@@ -961,10 +996,8 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 		childTypeSize := mem.r.targetData.TypeAllocSize(childType)
 		fields := make([]llvm.Value, numElements)
 		for i := range fields {
-			offset := i * int(childTypeSize)
-			field := rawValue{
-				buf: v.buf[offset : offset+int(childTypeSize)],
-			}
+			offset := uint32(i) * uint32(childTypeSize)
+			field := v.slice(offset, offset+uint32(childTypeSize))
 			var err error
 			fields[i], err = field.toLLVMValue(childType, mem)
 			if err != nil {
@@ -976,9 +1009,9 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 		}
 		return llvm.ConstArray(childType, fields), nil
 	case llvm.PointerTypeKind:
-		if v.buf[0] > 255 {
+		if v.isPointer(0) {
 			// This is a regular pointer.
-			llvmValue, err := pointerValue{v.buf[0]}.toLLVMValue(llvm.Type{}, mem)
+			llvmValue, err := pointerValue{v.slot(0)}.toLLVMValue(llvm.Type{}, mem)
 			if err != nil {
 				return llvm.Value{}, err
 			}
@@ -994,7 +1027,7 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 		}
 		// This is either a null pointer or a raw pointer for memory-mapped I/O
 		// (such as 0xe000ed00).
-		ptr, err := rawValue{v.buf[:mem.r.pointerSize]}.Uint(mem.r)
+		ptr, err := v.slice(0, mem.r.pointerSize).Uint(mem.r)
 		if err != nil {
 			return llvm.Value{}, err
 		}
@@ -1015,14 +1048,14 @@ func (v rawValue) toLLVMValue(llvmType llvm.Type, mem *memoryView) (llvm.Value, 
 		}
 		return llvm.ConstIntToPtr(ptrValue, llvmType), nil
 	case llvm.DoubleTypeKind:
-		b, err := rawValue{v.buf[:8]}.Uint(mem.r)
+		b, err := v.slice(0, 8).Uint(mem.r)
 		if err != nil {
 			return llvm.Value{}, err
 		}
 		f := math.Float64frombits(b)
 		return llvm.ConstFloat(llvmType, f), nil
 	case llvm.FloatTypeKind:
-		b, err := rawValue{v.buf[:4]}.Uint(mem.r)
+		b, err := v.slice(0, 4).Uint(mem.r)
 		if err != nil {
 			return llvm.Value{}, err
 		}
@@ -1040,14 +1073,11 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 		return true
 	}
 	if !llvmValue.IsAGlobalValue().IsNil() {
-		ptrSize := r.pointerSize
 		ptr, err := r.getValue(llvmValue).asPointer(r)
 		if err != nil {
 			panic(err)
 		}
-		for i := range ptrSize {
-			v.buf[i] = ptr.pointer
-		}
+		v.setPointer(ptr, r.pointerSize)
 	} else if !llvmValue.IsAConstantExpr().IsNil() {
 		switch llvmValue.Opcode() {
 		case llvm.BitCast:
@@ -1068,7 +1098,7 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 				// Widths like i1 don't fill their bytes, so leave them for runtime.
 				return false
 			}
-			copy(v.buf[:size], src.buf)
+			v.slice(0, size).copyFrom(src)
 		case llvm.GetElementPtr:
 			ptr := llvmValue.Operand(0)
 			index := llvmValue.Operand(1)
@@ -1094,15 +1124,12 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 					totalOffset += index * elementSize
 				}
 			}
-			ptrSize := r.pointerSize
 			ptrValue, err := r.getValue(ptr).asPointer(r)
 			if err != nil {
 				panic(err)
 			}
 			ptrValue.pointer += totalOffset
-			for i := range ptrSize {
-				v.buf[i] = ptrValue.pointer
-			}
+			v.setPointer(ptrValue, r.pointerSize)
 		case llvm.Add, llvm.Sub, llvm.Mul, llvm.Shl, llvm.LShr, llvm.AShr, llvm.And, llvm.Or, llvm.Xor:
 			// The IR builder folds these into constant expressions when both
 			// operands are constant. LLVM 17 can emit all of them, LLVM 19 only
@@ -1128,9 +1155,9 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 				return false
 			}
 			if result {
-				v.buf[0] = 1 // result is true
+				v.setSlot(0, 1) // result is true
 			} else {
-				v.buf[0] = 0 // result is false
+				v.setSlot(0, 0) // result is false
 			}
 		default:
 			llvmValue.Dump()
@@ -1151,33 +1178,25 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 			case 64:
 				var buf [8]byte
 				r.byteOrder.PutUint64(buf[:], n)
-				for i, b := range buf {
-					v.buf[i] = uint64(b)
-				}
+				v.setBytes(0, buf[:])
 			case 32:
 				var buf [4]byte
 				r.byteOrder.PutUint32(buf[:], uint32(n))
-				for i, b := range buf {
-					v.buf[i] = uint64(b)
-				}
+				v.setBytes(0, buf[:])
 			case 16:
 				var buf [2]byte
 				r.byteOrder.PutUint16(buf[:], uint16(n))
-				for i, b := range buf {
-					v.buf[i] = uint64(b)
-				}
+				v.setBytes(0, buf[:])
 			case 8, 1:
-				v.buf[0] = n
+				v.setSlot(0, n)
 			default:
 				panic("unknown integer size")
 			}
 		case llvm.StructTypeKind:
 			numElements := llvmType.StructElementTypesCount()
 			for i := range numElements {
-				offset := r.targetData.ElementOffset(llvmType, i)
-				field := rawValue{
-					buf: v.buf[offset:],
-				}
+				offset := uint32(r.targetData.ElementOffset(llvmType, i))
+				field := v.slice(offset, v.len(r))
 				if !field.set(r.builder.CreateExtractValue(llvmValue, i, ""), r) {
 					return false
 				}
@@ -1187,10 +1206,8 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 			childType := llvmType.ElementType()
 			childTypeSize := r.targetData.TypeAllocSize(childType)
 			for i := range numElements {
-				offset := i * int(childTypeSize)
-				field := rawValue{
-					buf: v.buf[offset:],
-				}
+				offset := uint32(i) * uint32(childTypeSize)
+				field := v.slice(offset, v.len(r))
 				if !field.set(r.builder.CreateExtractValue(llvmValue, i, ""), r) {
 					return false
 				}
@@ -1199,16 +1216,12 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 			f, _ := llvmValue.DoubleValue()
 			var buf [8]byte
 			r.byteOrder.PutUint64(buf[:], math.Float64bits(f))
-			for i, b := range buf {
-				v.buf[i] = uint64(b)
-			}
+			v.setBytes(0, buf[:])
 		case llvm.FloatTypeKind:
 			f, _ := llvmValue.DoubleValue()
 			var buf [4]byte
 			r.byteOrder.PutUint32(buf[:], math.Float32bits(float32(f)))
-			for i, b := range buf {
-				v.buf[i] = uint64(b)
-			}
+			v.setBytes(0, buf[:])
 		default:
 			llvmValue.Dump()
 			println()
@@ -1221,8 +1234,8 @@ func (v *rawValue) set(llvmValue llvm.Value, r *runner) bool {
 // hasPointer returns true if this raw value contains a pointer somewhere in the
 // buffer.
 func (v rawValue) hasPointer() bool {
-	for _, p := range v.buf {
-		if p > 255 {
+	for i := range v.len(nil) {
+		if v.isPointer(i) {
 			return true
 		}
 	}
@@ -1387,17 +1400,13 @@ func (r *runner) readObjectLayout(layoutValue value) (uint64, *big.Int) {
 
 	// Read the object size in words and the bitmap from the global.
 	buf := r.objects[ptr.index()].buffer.(rawValue)
-	objectSizeWords, err := rawValue{buf: buf.buf[:r.pointerSize]}.Uint(r)
+	objectSizeWords, err := buf.slice(0, r.pointerSize).Uint(r)
 	if err != nil {
 		panic("interp: GC layout contains pointer data")
 	}
-	rawByteValues := buf.buf[r.pointerSize:]
-	rawBytes := make([]byte, len(rawByteValues))
-	for i, v := range rawByteValues {
-		if uint64(byte(v)) != v {
-			panic("found pointer in data array?") // sanity check
-		}
-		rawBytes[i] = byte(v)
+	rawBytes, err := buf.slice(r.pointerSize, buf.len(r)).bytes()
+	if err != nil {
+		panic("found pointer in data array?") // sanity check
 	}
 	reverseBytes(rawBytes) // little-endian to big-endian
 	bitmap := new(big.Int).SetBytes(rawBytes)
