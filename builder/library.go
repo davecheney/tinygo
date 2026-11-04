@@ -136,18 +136,25 @@ func (l *Library) load(config *compileopts.Config, tmpdir string) (job *compileJ
 	// Note: -fdebug-prefix-map is necessary to make the output archive
 	// reproducible. Otherwise the temporary directory is stored in the archive
 	// itself, which varies each run.
-	args := append(l.cflags(target, headerPath), "-c", "-Oz", "-gdwarf-4", "-ffunction-sections", "-fdata-sections", "-Wno-macro-redefined", "--target="+compileopts.ClangTriple(target), "-fdebug-prefix-map="+dir+"="+remapDir)
+	args := append(l.cflags(target, headerPath), "-c", "-Oz", "-gdwarf-4", "-ffunction-sections", "-fdata-sections", "-Wno-macro-redefined", "--target="+compileopts.ClangTriple(target))
 	resourceDir := goenv.ClangResourceDir(config.TrimPath())
 	if config.TrimPath() {
+		prefixMaps := []string{
+			compileopts.DebugPrefixMap(dir, remapDir),
+			compileopts.FilePrefixMap(goenv.Get("TINYGOROOT"), config.CSourcePath("github.com/tinygo-org/tinygo")),
+			compileopts.FilePrefixMap(goenv.Get("GOCACHE"), config.CSourcePath("tinygo-cache")),
+		}
+		if resourceDir != "" {
+			prefixMaps = append(prefixMaps, compileopts.FilePrefixMap(resourceDir, config.CSourcePath("clang")))
+		}
+		compileopts.SortPrefixMaps(prefixMaps)
+		args = append(args, prefixMaps...)
 		args = append(args,
-			"-ffile-prefix-map="+goenv.Get("TINYGOROOT")+"="+config.CSourcePath("github.com/tinygo-org/tinygo"),
-			"-ffile-prefix-map="+goenv.Get("GOCACHE")+"="+config.CSourcePath("tinygo-cache"),
 			"-fdebug-compilation-dir=.",
 			"-gno-record-command-line",
 		)
-		if resourceDir != "" {
-			args = append(args, "-ffile-prefix-map="+resourceDir+"="+config.CSourcePath("clang"))
-		}
+	} else {
+		args = append(args, "-fdebug-prefix-map="+dir+"="+remapDir)
 	}
 	if resourceDir != "" {
 		args = append(args, "-resource-dir="+resourceDir)

@@ -404,6 +404,12 @@ func (c *Config) DefaultBinaryExtension() string {
 // CFlags returns the flags to pass to the C compiler. This is necessary for CGo
 // preprocessing.
 func (c *Config) CFlags(libclang bool) []string {
+	return c.CFlagsWithPrefixMaps(libclang, nil)
+}
+
+// CFlagsWithPrefixMaps returns C compiler flags with extra generated directory
+// prefix maps. It sorts generated maps so the most specific map wins.
+func (c *Config) CFlagsWithPrefixMaps(libclang bool, extraPrefixMaps []string) []string {
 	var cflags []string
 	for _, flag := range c.Target.CFlags {
 		cflags = append(cflags, strings.ReplaceAll(flag, "{root}", goenv.Get("TINYGOROOT")))
@@ -425,15 +431,20 @@ func (c *Config) CFlags(libclang bool) []string {
 		)
 	}
 	if c.TrimPath() {
+		prefixMaps := append([]string(nil), extraPrefixMaps...)
+		prefixMaps = append(prefixMaps,
+			FilePrefixMap(goenv.Get("TINYGOROOT"), c.CSourcePath("github.com/tinygo-org/tinygo")),
+			FilePrefixMap(goenv.Get("GOCACHE"), c.CSourcePath("tinygo-cache")),
+		)
+		if resourceDir != "" {
+			prefixMaps = append(prefixMaps, FilePrefixMap(resourceDir, c.CSourcePath("clang")))
+		}
+		SortPrefixMaps(prefixMaps)
+		cflags = append(cflags, prefixMaps...)
 		cflags = append(cflags,
-			"-ffile-prefix-map="+goenv.Get("TINYGOROOT")+"="+c.CSourcePath("github.com/tinygo-org/tinygo"),
-			"-ffile-prefix-map="+goenv.Get("GOCACHE")+"="+c.CSourcePath("tinygo-cache"),
 			"-fdebug-compilation-dir=.",
 			"-gno-record-command-line",
 		)
-		if resourceDir != "" {
-			cflags = append(cflags, "-ffile-prefix-map="+resourceDir+"="+c.CSourcePath("clang"))
-		}
 	}
 	// Always emit debug information. It is optionally stripped at link time.
 	cflags = append(cflags, "-gdwarf-4")

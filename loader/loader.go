@@ -563,8 +563,7 @@ func (p *Package) RecordedPath(filename string) string {
 // DebugPrefixMap returns the Clang flag that maps this package to its recorded
 // source directory.
 func (p *Package) DebugPrefixMap() string {
-	dir := strings.TrimSuffix(p.OriginalModuleDir(), string(filepath.Separator)) + string(filepath.Separator)
-	return "-ffile-prefix-map=" + dir + "=" + p.program.config.CSourcePath(p.RecordedModuleDir()) + "/"
+	return compileopts.FilePrefixMap(p.OriginalModuleDir(), p.program.config.CSourcePath(p.RecordedModuleDir()))
 }
 
 // RecordedCFlags returns C flags with path options rewritten to use recorded
@@ -761,15 +760,15 @@ func (p *Package) parseFiles() ([]*ast.File, error) {
 				originals[file] = text.String()
 			}
 		}
-		var initialCFlags []string
-		initialCFlags = append(initialCFlags, p.program.config.CFlags(true)...)
-		initialCFlags = append(initialCFlags, "-I"+p.Dir)
+		var prefixMaps []string
 		if p.program.config.TrimPath() {
-			initialCFlags = append(initialCFlags,
+			prefixMaps = append(prefixMaps,
 				p.DebugPrefixMap(),
-				"-ffile-prefix-map="+filepath.Join(p.program.goroot, "src")+"="+p.program.config.CSourcePath("."),
+				compileopts.FilePrefixMap(filepath.Join(p.program.goroot, "src"), p.program.config.CSourcePath(".")),
 			)
 		}
+		initialCFlags := p.program.config.CFlagsWithPrefixMaps(true, prefixMaps)
+		initialCFlags = append(initialCFlags, "-I"+p.Dir)
 		var env cgo.Flags
 		for _, v := range []struct {
 			name  string

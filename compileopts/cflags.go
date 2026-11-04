@@ -1,6 +1,44 @@
 package compileopts
 
-import "strings"
+import (
+	"cmp"
+	"path/filepath"
+	"slices"
+	"strings"
+)
+
+// FilePrefixMap returns a Clang file-prefix map for two directory paths.
+func FilePrefixMap(from, to string) string {
+	return directoryPrefixMap("-ffile-prefix-map=", from, to)
+}
+
+// DebugPrefixMap returns a Clang debug-prefix map for two directory paths.
+func DebugPrefixMap(from, to string) string {
+	return directoryPrefixMap("-fdebug-prefix-map=", from, to)
+}
+
+func directoryPrefixMap(flag, from, to string) string {
+	if !strings.HasSuffix(from, string(filepath.Separator)) {
+		from += string(filepath.Separator)
+	}
+	if !strings.HasSuffix(to, "/") {
+		to += "/"
+	}
+	return flag + from + "=" + to
+}
+
+// SortPrefixMaps puts longer source paths after shorter source paths.
+func SortPrefixMaps(prefixMaps []string) {
+	slices.SortStableFunc(prefixMaps, func(a, b string) int {
+		return cmp.Compare(len(prefixMapSource(a)), len(prefixMapSource(b)))
+	})
+}
+
+func prefixMapSource(flag string) string {
+	_, mapping, _ := strings.Cut(flag, "=")
+	from, _, _ := strings.Cut(mapping, "=")
+	return from
+}
 
 // RewriteCFlags rewrites path operands without changing other compiler options.
 func RewriteCFlags(flags []string, rewrite func(string) string) []string {
