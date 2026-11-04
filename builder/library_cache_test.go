@@ -18,8 +18,9 @@ func TestLibraryTrimPathCache(t *testing.T) {
 		wantName   string
 		rebuild    bool
 	}{
-		{"trimmed-old-cache", true, "probe+trimpath-v1-" + triple, "probe+trimpath-v2-" + triple, true},
-		{"trimmed-current-cache", true, "probe+trimpath-v2-" + triple, "probe+trimpath-v2-" + triple, false},
+		{"trimmed-v1-cache", true, "probe+trimpath-v1-" + triple, "probe+trimpath-v3-" + triple, true},
+		{"trimmed-v2-cache", true, "probe+trimpath-v2-" + triple, "probe+trimpath-v3-" + triple, true},
+		{"trimmed-current-cache", true, "probe+trimpath-v3-" + triple, "probe+trimpath-v3-" + triple, false},
 		{"untrimmed-cache", false, "probe-" + triple, "probe-" + triple, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

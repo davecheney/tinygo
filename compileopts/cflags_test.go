@@ -2,8 +2,21 @@ package compileopts
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 )
+
+func TestSortPrefixMaps(t *testing.T) {
+	broad := FilePrefixMap("/cache", "/_/cache")
+	nested := DebugPrefixMap("/cache/build", "/_/build")
+	equal := FilePrefixMap("/cache/build", "/_/module")
+	withEquals := FilePrefixMap("/cache/a=longer/path", "/_/source")
+	maps := []string{withEquals, nested, equal, broad}
+	SortPrefixMaps(maps)
+	if want := []string{broad, nested, equal, withEquals}; !slices.Equal(maps, want) {
+		t.Fatalf("prefix maps = %q, want %q", maps, want)
+	}
+}
 
 func TestDirectoryPrefixMaps(t *testing.T) {
 	tests := []struct {

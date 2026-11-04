@@ -1,9 +1,50 @@
 package compileopts
 
 import (
+	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/tinygo-org/tinygo/goenv"
 )
+
+func TestCFlagsWithPrefixMaps(t *testing.T) {
+	root := goenv.Get("TINYGOROOT")
+	parentMap := FilePrefixMap(filepath.Dir(root), "/_/parent")
+	moduleMap := FilePrefixMap(filepath.Join(root, "nested", "module"), "/_/module")
+	targetFlags := []string{moduleMap, "-DPROBE=1", parentMap}
+	extraMaps := []string{moduleMap, parentMap}
+	for _, trimPath := range []bool{false, true} {
+		config := &Config{
+			Options: &Options{TrimPath: trimPath},
+			Target: &TargetSpec{
+				Triple: "x86_64-unknown-linux-gnu", GOOS: "linux", GOARCH: "amd64",
+				CFlags: targetFlags,
+			},
+		}
+		for _, libclang := range []bool{false, true} {
+			flags := config.CFlagsWithPrefixMaps(libclang, extraMaps)
+			if !slices.Equal(flags[:len(targetFlags)], targetFlags) {
+				t.Fatalf("target flags changed: %q", flags)
+			}
+			generated := flags[len(targetFlags):]
+			if trimPath {
+				rootMap := FilePrefixMap(root, config.CSourcePath("github.com/tinygo-org/tinygo"))
+				parentIndex := slices.Index(generated, parentMap)
+				rootIndex := slices.Index(generated, rootMap)
+				moduleIndex := slices.Index(generated, moduleMap)
+				if parentIndex < 0 || rootIndex <= parentIndex || moduleIndex <= rootIndex {
+					t.Fatalf("nested maps are not most-specific-last: %q", generated)
+				}
+			} else if slices.Contains(generated, parentMap) || slices.Contains(generated, moduleMap) {
+				t.Fatalf("untrimmed flags contain extra maps: %q", generated)
+			}
+		}
+	}
+	if !slices.Equal(extraMaps, []string{moduleMap, parentMap}) {
+		t.Fatalf("extra maps changed: %q", extraMaps)
+	}
+}
 
 func TestExtraFilesBoehm(t *testing.T) {
 	target := &TargetSpec{

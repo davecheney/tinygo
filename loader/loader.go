@@ -761,15 +761,15 @@ func (p *Package) parseFiles() ([]*ast.File, error) {
 				originals[file] = text.String()
 			}
 		}
-		var initialCFlags []string
-		initialCFlags = append(initialCFlags, p.program.config.CFlags(true)...)
-		initialCFlags = append(initialCFlags, "-I"+p.Dir)
+		var prefixMaps []string
 		if p.program.config.TrimPath() {
-			initialCFlags = append(initialCFlags,
+			prefixMaps = append(prefixMaps,
 				p.DebugPrefixMap(),
 				compileopts.FilePrefixMap(filepath.Join(p.program.goroot, "src"), p.program.config.CSourcePath(".")),
 			)
 		}
+		initialCFlags := p.program.config.CFlagsWithPrefixMaps(true, prefixMaps)
+		initialCFlags = append(initialCFlags, "-I"+p.Dir)
 		var env cgo.Flags
 		for _, v := range []struct {
 			name  string

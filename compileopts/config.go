@@ -370,7 +370,7 @@ func (c *Config) LibraryPath(name string) string {
 		options += "+malloc"
 	}
 	if c.TrimPath() {
-		options += "+trimpath-v2"
+		options += "+trimpath-v3"
 	}
 
 	// No precompiled library found. Determine the path name that will be used
@@ -404,6 +404,12 @@ func (c *Config) DefaultBinaryExtension() string {
 // CFlags returns the flags to pass to the C compiler. This is necessary for CGo
 // preprocessing.
 func (c *Config) CFlags(libclang bool) []string {
+	return c.CFlagsWithPrefixMaps(libclang, nil)
+}
+
+// CFlagsWithPrefixMaps adds generated directory maps in most-specific-last order.
+// It does not reorder user or target flags.
+func (c *Config) CFlagsWithPrefixMaps(libclang bool, extraPrefixMaps []string) []string {
 	var cflags []string
 	for _, flag := range c.Target.CFlags {
 		cflags = append(cflags, strings.ReplaceAll(flag, "{root}", goenv.Get("TINYGOROOT")))
@@ -425,15 +431,20 @@ func (c *Config) CFlags(libclang bool) []string {
 		)
 	}
 	if c.TrimPath() {
-		cflags = append(cflags,
+		prefixMaps := append([]string(nil), extraPrefixMaps...)
+		prefixMaps = append(prefixMaps,
 			FilePrefixMap(goenv.Get("TINYGOROOT"), c.CSourcePath("github.com/tinygo-org/tinygo")),
 			FilePrefixMap(goenv.Get("GOCACHE"), c.CSourcePath("tinygo-cache")),
+		)
+		if resourceDir != "" {
+			prefixMaps = append(prefixMaps, FilePrefixMap(resourceDir, c.CSourcePath("clang")))
+		}
+		SortPrefixMaps(prefixMaps)
+		cflags = append(cflags, prefixMaps...)
+		cflags = append(cflags,
 			"-fdebug-compilation-dir=.",
 			"-gno-record-command-line",
 		)
-		if resourceDir != "" {
-			cflags = append(cflags, FilePrefixMap(resourceDir, c.CSourcePath("clang")))
-		}
 	}
 	// Always emit debug information. It is optionally stripped at link time.
 	cflags = append(cflags, "-gdwarf-4")

@@ -1,7 +1,9 @@
 package compileopts
 
 import (
+	"cmp"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -23,6 +25,18 @@ func directoryPrefixMap(flag, from, to string) string {
 		to += "/"
 	}
 	return flag + from + "=" + to
+}
+
+// SortPrefixMaps puts longer source paths last so Clang uses the most specific map.
+func SortPrefixMaps(prefixMaps []string) {
+	slices.SortStableFunc(prefixMaps, func(a, b string) int {
+		return cmp.Compare(len(prefixMapSource(a)), len(prefixMapSource(b)))
+	})
+}
+
+func prefixMapSource(flag string) string {
+	_, mapping, _ := strings.Cut(flag, "=")
+	return mapping[:strings.LastIndexByte(mapping, '=')]
 }
 
 // RewriteCFlags rewrites path operands without changing other compiler options.
