@@ -1,6 +1,22 @@
 package compileopts
 
-import "strings"
+import (
+	"cmp"
+	"slices"
+	"strings"
+)
+
+// SortPrefixMaps puts more specific Clang prefix maps last.
+func SortPrefixMaps(prefixMaps []string) {
+	source := func(flag string) string {
+		_, mapping, _ := strings.Cut(flag, "=")
+		from, _, _ := strings.Cut(mapping, "=")
+		return from
+	}
+	slices.SortStableFunc(prefixMaps, func(a, b string) int {
+		return cmp.Compare(len(source(a)), len(source(b)))
+	})
+}
 
 // RewriteCFlags rewrites path operands without changing other compiler options.
 func RewriteCFlags(flags []string, rewrite func(string) string) []string {

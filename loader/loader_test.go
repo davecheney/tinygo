@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -78,6 +79,104 @@ import "C"
 		if len(test.flags) < len(test.want) || !slices.Equal(test.flags[len(test.flags)-len(test.want):], test.want) {
 			t.Errorf("flags %q do not end with %q", test.flags, test.want)
 		}
+	}
+	headerFlags := p.CGoHeaderCFlags(dir)
+	want := append(slices.Clone(p.CFlags), "-working-directory="+dir)
+	if !slices.Equal(headerFlags, want) {
+		t.Errorf("CGoHeaderCFlags() = %q, want %q", headerFlags, want)
+	}
+}
+
+func TestCGoTrimPathPrefixMapOrder(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "b")
+	cache := filepath.Join(root, "bc")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "probe.go"), []byte("package probe\n/* int value; */\nimport \"C\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", cache)
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("LocalAppData", cache)
+	targetMap := "-ffile-prefix-map=" + dir + "c/target=target"
+	userMap := "-ffile-prefix-map=" + dir + "c/user=user-c"
+	t.Setenv("CGO_CPPFLAGS", "-ffile-prefix-map=/=user-cpp")
+	t.Setenv("CGO_CFLAGS", strconv.Quote(userMap))
+	t.Setenv("CGO_CXXFLAGS", "-ffile-prefix-map=/=user-cxx")
+	config := &compileopts.Config{
+		Options: &compileopts.Options{Opt: "0", TrimPath: true},
+		Target: &compileopts.TargetSpec{
+			Triple: "armv6m-unknown-unknown-eabi", GOOS: "linux", GOARCH: "arm",
+			CFlags: []string{targetMap},
+		},
+	}
+	p := &Package{
+		PackageJSON: PackageJSON{Dir: dir, ImportPath: "example.com/probe", CgoFiles: []string{"probe.go"}},
+		FileHashes:  make(map[string][]byte),
+		program: &Program{
+			workingDir: dir,
+			goroot:     filepath.Join(root, "goroot"),
+			fset:       token.NewFileSet(),
+			config:     config,
+		},
+	}
+	p.Module.Path = "example.com/probe"
+	p.Module.Dir = dir
+	if _, err := p.parseFiles(); err != nil {
+		t.Fatal(err)
+	}
+	moduleMap := p.DebugPrefixMap()
+	cacheMap := "-ffile-prefix-map=" + goenv.Get("GOCACHE") + "=" + config.CSourcePath("tinygo-cache")
+	for _, test := range []struct {
+		name    string
+		flags   []string
+		userMap string
+	}{
+		{"C", p.CFlags, userMap},
+		{"C++", p.CXXFlags, "-ffile-prefix-map=/=user-cxx"},
+	} {
+		moduleIndex := slices.Index(test.flags, moduleMap)
+		cacheIndex := slices.Index(test.flags, cacheMap)
+		if moduleIndex < 0 || cacheIndex < 0 || cacheIndex <= moduleIndex {
+			t.Errorf("%s cache map must follow module map: %q", test.name, test.flags)
+		}
+		targetIndex := slices.Index(test.flags, targetMap)
+		cppIndex := slices.Index(test.flags, "-ffile-prefix-map=/=user-cpp")
+		userIndex := slices.Index(test.flags, test.userMap)
+		if targetIndex < 0 || cppIndex <= cacheIndex || userIndex <= cppIndex || targetIndex >= moduleIndex {
+			t.Errorf("%s user maps are out of order: %q", test.name, test.flags)
+		}
+	}
+	tempMap := "-ffile-prefix-map=" + dir + "=" + config.CSourcePath(p.RecordedDir())
+	headerFlags := p.CGoHeaderCFlags(dir)
+	lastIndex := func(flags []string, want string) int {
+		for i := len(flags) - 1; i >= 0; i-- {
+			if flags[i] == want {
+				return i
+			}
+		}
+		return -1
+	}
+	if lastIndex(headerFlags, cacheMap) <= lastIndex(headerFlags, tempMap) {
+		t.Errorf("cache map must follow overlapping temporary map: %q", headerFlags)
+	}
+	if lastIndex(headerFlags, userMap) >= lastIndex(headerFlags, tempMap) {
+		t.Errorf("temporary map must follow user maps: %q", headerFlags)
+	}
+	for _, flag := range []string{targetMap, userMap} {
+		if lastIndex(headerFlags, flag) != slices.Index(headerFlags, flag) {
+			t.Errorf("user map was reapplied: %q", headerFlags)
+		}
+	}
+	otherDir := filepath.Join(root, "unrelated")
+	want := append(slices.Clone(p.CFlags),
+		"-working-directory="+otherDir,
+		"-ffile-prefix-map="+otherDir+"="+config.CSourcePath(p.RecordedDir()),
+	)
+	if got := p.CGoHeaderCFlags(otherDir); !slices.Equal(got, want) {
+		t.Errorf("CGoHeaderCFlags() = %q, want %q", got, want)
 	}
 }
 

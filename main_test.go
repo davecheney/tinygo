@@ -169,14 +169,17 @@ func TestTrimPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, name := range []string{"a", "b"} {
-		dir := filepath.Join(root, name)
+	for _, dirs := range []struct{ source, cache string }{
+		{source: "a", cache: "cache-a"},
+		{source: "b", cache: "bc"},
+	} {
+		dir := filepath.Join(root, dirs.source)
 		if err := os.CopyFS(dir, os.DirFS(filepath.Join(TESTDATA, "trimpath"))); err != nil {
 			t.Fatal(err)
 		}
 
-		outpath := filepath.Join(root, name+".out")
-		cache := filepath.Join(root, "cache-"+name)
+		outpath := filepath.Join(root, dirs.source+".out")
+		cache := filepath.Join(root, dirs.cache)
 		cmd := trimPathCommand(t, dir, "build", "-trimpath", "-p=4", "-o", outpath, ".")
 		cmd.Env = append(cmd.Env, "XDG_CACHE_HOME="+cache, "HOME="+cache, "LocalAppData="+cache)
 		if output, err := cmd.CombinedOutput(); err != nil {

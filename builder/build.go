@@ -482,13 +482,8 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (*BuildR
 					f.Close()
 
 					// Compile the code (if there is any) to bitcode.
-					flags := append([]string{"-c", "-emit-llvm", "-o", f.Name() + ".bc", f.Name()}, pkg.CFlags...)
-					flags = append(flags, "-working-directory="+tmpdir)
-					if config.TrimPath() {
-						flags = append(flags,
-							"-ffile-prefix-map="+tmpdir+"="+config.CSourcePath(pkg.RecordedDir()),
-						)
-					}
+					// CGoHeaderCFlags adds the temporary path map when -trimpath is enabled.
+					flags := append([]string{"-c", "-emit-llvm", "-o", f.Name() + ".bc", f.Name()}, pkg.CGoHeaderCFlags(tmpdir)...)
 					if config.Options.PrintCommands != nil {
 						config.Options.PrintCommands("clang", flags...)
 					}

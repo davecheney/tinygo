@@ -104,6 +104,8 @@ type Package struct {
 	EmbedGlobals map[string][]*EmbedFile
 	Pkg          *types.Package
 	info         types.Info
+
+	generatedPrefixMaps []string
 }
 
 type EmbedFile struct {
@@ -575,6 +577,25 @@ func (p *Package) RecordedCFlags() []string {
 	return compileopts.RewriteCFlags(p.CFlags, p.recordedCFlagPath)
 }
 
+// CGoHeaderCFlags returns flags for compiling generated CGo headers.
+func (p *Package) CGoHeaderCFlags(tmpdir string) []string {
+	flags := append(slices.Clone(p.CFlags), "-working-directory="+tmpdir)
+	if !p.program.config.TrimPath() {
+		return flags
+	}
+	flags = append(flags, "-ffile-prefix-map="+tmpdir+"="+p.program.config.CSourcePath(p.RecordedDir()))
+	tmpPrefix, _, _ := strings.Cut(tmpdir, "=")
+	// Reapply longer generated maps that the temporary map would override.
+	for _, flag := range p.generatedPrefixMaps {
+		_, mapping, _ := strings.Cut(flag, "=")
+		source, _, _ := strings.Cut(mapping, "=")
+		if len(source) > len(tmpPrefix) && strings.HasPrefix(source, tmpPrefix) {
+			flags = append(flags, flag)
+		}
+	}
+	return flags
+}
+
 func (p *Package) recordedCFlagPath(filename string) string {
 	if recorded := p.RecordedPath(filename); recorded != filename {
 		return recorded
@@ -760,15 +781,16 @@ func (p *Package) parseFiles() ([]*ast.File, error) {
 				originals[file] = text.String()
 			}
 		}
-		var initialCFlags []string
-		initialCFlags = append(initialCFlags, p.program.config.CFlags(true)...)
-		initialCFlags = append(initialCFlags, "-I"+p.Dir)
+		var prefixMaps []string
 		if p.program.config.TrimPath() {
-			initialCFlags = append(initialCFlags,
+			prefixMaps = append(prefixMaps,
 				p.DebugPrefixMap(),
 				"-ffile-prefix-map="+filepath.Join(p.program.goroot, "src")+"="+p.program.config.CSourcePath("."),
 			)
 		}
+		initialCFlags, generatedPrefixMaps := p.program.config.CFlagsWithPrefixMaps(true, prefixMaps)
+		initialCFlags = append(initialCFlags, "-I"+p.Dir)
+		p.generatedPrefixMaps = generatedPrefixMaps
 		var env cgo.Flags
 		for _, v := range []struct {
 			name  string

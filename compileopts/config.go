@@ -370,7 +370,7 @@ func (c *Config) LibraryPath(name string) string {
 		options += "+malloc"
 	}
 	if c.TrimPath() {
-		options += "+trimpath-v1"
+		options += "+trimpath-v2"
 	}
 
 	// No precompiled library found. Determine the path name that will be used
@@ -401,9 +401,15 @@ func (c *Config) DefaultBinaryExtension() string {
 	return ""
 }
 
-// CFlags returns the flags to pass to the C compiler. This is necessary for CGo
-// preprocessing.
+// CFlags returns the flags to pass to the C compiler.
 func (c *Config) CFlags(libclang bool) []string {
+	flags, _ := c.CFlagsWithPrefixMaps(libclang, nil)
+	return flags
+}
+
+// CFlagsWithPrefixMaps returns C flags and generated maps.
+// Extra maps are used only when trimming paths.
+func (c *Config) CFlagsWithPrefixMaps(libclang bool, extraPrefixMaps []string) ([]string, []string) {
 	var cflags []string
 	for _, flag := range c.Target.CFlags {
 		cflags = append(cflags, strings.ReplaceAll(flag, "{root}", goenv.Get("TINYGOROOT")))
@@ -424,16 +430,19 @@ func (c *Config) CFlags(libclang bool) []string {
 			"-I"+filepath.Join(goenv.Get("TINYGOROOT"), "lib", "bdwgc", "include"),
 		)
 	}
+	var prefixMaps []string
 	if c.TrimPath() {
-		cflags = append(cflags,
-			"-ffile-prefix-map="+goenv.Get("TINYGOROOT")+"="+c.CSourcePath("github.com/tinygo-org/tinygo"),
-			"-ffile-prefix-map="+goenv.Get("GOCACHE")+"="+c.CSourcePath("tinygo-cache"),
-			"-fdebug-compilation-dir=.",
-			"-gno-record-command-line",
-		)
-		if resourceDir != "" {
-			cflags = append(cflags, "-ffile-prefix-map="+resourceDir+"="+c.CSourcePath("clang"))
+		prefixMaps = []string{
+			"-ffile-prefix-map=" + goenv.Get("TINYGOROOT") + "=" + c.CSourcePath("github.com/tinygo-org/tinygo"),
+			"-ffile-prefix-map=" + goenv.Get("GOCACHE") + "=" + c.CSourcePath("tinygo-cache"),
 		}
+		if resourceDir != "" {
+			prefixMaps = append(prefixMaps, "-ffile-prefix-map="+resourceDir+"="+c.CSourcePath("clang"))
+		}
+		prefixMaps = append(prefixMaps, extraPrefixMaps...)
+		SortPrefixMaps(prefixMaps)
+		cflags = append(cflags, prefixMaps...)
+		cflags = append(cflags, "-fdebug-compilation-dir=.", "-gno-record-command-line")
 	}
 	// Always emit debug information. It is optionally stripped at link time.
 	cflags = append(cflags, "-gdwarf-4")
@@ -458,7 +467,7 @@ func (c *Config) CFlags(libclang bool) []string {
 	if c.ABI() != "" {
 		cflags = append(cflags, "-mabi="+c.ABI())
 	}
-	return cflags
+	return cflags, prefixMaps
 }
 
 // LibcCFlags returns the C compiler flags for the configured libc.
