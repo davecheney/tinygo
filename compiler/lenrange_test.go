@@ -369,3 +369,213 @@ func TestLengthRangeRuntimeDeclarations(t *testing.T) {
 		})
 	}
 }
+
+// Lengths loaded from memory are Go lengths too, so the loads get !range.
+func TestLengthRangeLoads(t *testing.T) {
+	targets := []struct {
+		name    string
+		options *compileopts.Options
+		bits    int
+	}{
+		{"wasm", &compileopts.Options{Target: "wasm"}, 32},
+		{"amd64", &compileopts.Options{GOOS: "linux", GOARCH: "amd64"}, 64},
+	}
+	functions := []struct {
+		name   string
+		ranged int
+	}{
+		{"main.fieldLength", 2},
+		{"main.globalLength", 3},
+		{"main.derefLength", 2},
+		{"main.derefString", 1},
+		{"main.elementLength", 2},
+		{"main.ordinaryFields", 0},
+	}
+
+	for _, target := range targets {
+		t.Run(target.name, func(t *testing.T) {
+			mod, errs := testCompilePackage(t, target.options, "lenrange-load.go")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			defer mod.Dispose()
+
+			want := fmt.Sprintf("!{i%d 0, i%d -%d}", target.bits, target.bits, uint64(1)<<(target.bits-1))
+			for _, test := range functions {
+				fn := mod.NamedFunction(test.name)
+				if fn.IsNil() {
+					t.Fatalf("missing function %s", test.name)
+				}
+				if got := countRangeLoads(fn); got != test.ranged {
+					t.Errorf("%s has %d loads with !range, want %d:\n%s", test.name, got, test.ranged, fn.String())
+				}
+			}
+			if !strings.Contains(mod.String(), want) {
+				t.Errorf("module does not have range metadata %s", want)
+			}
+			if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// On AVR, lengths are 16 bits wide and can set the sign bit, so loads of them
+// must not get !range.
+func TestLengthRangeLoads16Bit(t *testing.T) {
+	config := &Config{Triple: "avr", GOOS: "linux", GOARCH: "arm"}
+	machine, err := NewTargetMachine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer machine.Dispose()
+
+	c := newCompilerContext("lenrange-load-avr", machine, config, false)
+	defer c.ctx.Dispose()
+	defer c.mod.Dispose()
+	defer c.targetData.Dispose()
+	defer c.dispose()
+	if c.uintptrType.IntTypeWidth() != 16 || c.intType.IntTypeWidth() != 32 {
+		t.Fatal("expected 16-bit pointers and 32-bit Go ints")
+	}
+
+	c.llvmTypes.Set(types.Typ[types.String], c.ctx.StructType([]llvm.Type{c.dataPtrType, c.uintptrType}, false))
+	sliceType := types.NewSlice(types.Typ[types.Byte])
+	params := types.NewTuple(
+		types.NewParam(token.NoPos, nil, "s", types.NewPointer(sliceType)),
+		types.NewParam(token.NoPos, nil, "text", types.NewPointer(types.Typ[types.String])),
+	)
+	sig := types.NewSignatureType(nil, nil, nil, params, nil, false)
+	program := ssa.NewProgram(token.NewFileSet(), 0)
+	irbuilder := c.ctx.NewBuilder()
+	defer irbuilder.Dispose()
+	b := newBuilder(c, irbuilder, program.NewFunction("loadLengths", sig, ""))
+	b.SetInsertPointAtEnd(c.ctx.AddBasicBlock(b.llvmFn, "entry"))
+	b.loadFromStorage(b.llvmFn.Param(0), sliceType, "")
+	b.loadFromStorage(b.llvmFn.Param(1), types.Typ[types.String], "")
+	b.CreateRetVoid()
+
+	lengthLoads := 0
+	for inst := b.llvmFn.EntryBasicBlock().FirstInstruction(); !inst.IsNil(); inst = llvm.NextInstruction(inst) {
+		if !inst.IsALoadInst().IsNil() && inst.Type() == c.uintptrType {
+			lengthLoads++
+		}
+	}
+	if lengthLoads != 3 {
+		t.Errorf("found %d 16-bit length loads, want 3:\n%s", lengthLoads, b.llvmFn.String())
+	}
+	if got := countRangeLoads(b.llvmFn); got != 0 {
+		t.Errorf("%d loads have !range on a 16-bit length:\n%s", got, b.llvmFn.String())
+	}
+	if err := llvm.VerifyModule(c.mod, llvm.ReturnStatusAction); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLengthRangeLoadOptimization(t *testing.T) {
+	for _, withRange := range []bool{false, true} {
+		t.Run(fmt.Sprintf("range=%t", withRange), func(t *testing.T) {
+			mod, errs := testCompilePackage(t, &compileopts.Options{Target: "wasm"}, "lenrange-load.go")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			defer mod.Dispose()
+			if !withRange {
+				removeRangeMetadata(mod)
+			}
+
+			passOptions := llvm.NewPassBuilderOptions()
+			defer passOptions.Dispose()
+			if err := mod.RunPasses("instcombine", llvm.TargetMachine{}, passOptions); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"main.negativeLoadedLength", "main.negativeLoadedCapacity", "main.negativeLoadedString"} {
+				fn := mod.NamedFunction(name)
+				if fn.IsNil() {
+					t.Fatalf("missing function %s", name)
+				}
+				if isFalse := strings.Contains(fn.String(), "ret i1 false"); isFalse != withRange {
+					t.Errorf("%s optimized to false = %t, want %t:\n%s", name, isFalse, withRange, fn.String())
+				}
+			}
+			fn := mod.NamedFunction("main.negativeLoadedInt")
+			if fn.IsNil() {
+				t.Fatal("missing function main.negativeLoadedInt")
+			}
+			if strings.Contains(fn.String(), "ret i1 false") {
+				t.Errorf("an ordinary int was treated as non-negative:\n%s", fn.String())
+			}
+		})
+	}
+}
+
+func TestLengthRangeLoadBoundsChecks(t *testing.T) {
+	options := &compileopts.Options{Target: "wasm", Opt: "z"}
+	target, err := compileopts.LoadTarget(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := &compileopts.Config{Options: options, Target: target}
+
+	for _, withRange := range []bool{false, true} {
+		t.Run(fmt.Sprintf("range=%t", withRange), func(t *testing.T) {
+			mod, errs := testCompilePackage(t, options, "lenrange-load.go")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			defer mod.Dispose()
+			if !withRange {
+				removeRangeMetadata(mod)
+			}
+
+			for fn := mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
+				if !fn.IsDeclaration() {
+					transform.AddStandardAttributes(fn, config)
+				}
+			}
+			passOptions := llvm.NewPassBuilderOptions()
+			defer passOptions.Dispose()
+			// Match the size pipeline in transform.Optimize.
+			level := "Oz"
+			if llvmutil.Version() >= 23 {
+				level = "O2"
+			}
+			if err := mod.RunPasses("thinlto-pre-link<"+level+">", llvm.TargetMachine{}, passOptions); err != nil {
+				t.Fatal(err)
+			}
+			fn := mod.NamedFunction("main.globalSum")
+			if fn.IsNil() {
+				t.Fatal("missing function main.globalSum")
+			}
+			if hasCheck := strings.Contains(fn.String(), "@runtime.lookupPanic"); hasCheck == withRange {
+				t.Errorf("main.globalSum bounds check = %t, want %t:\n%s", hasCheck, !withRange, fn.String())
+			}
+		})
+	}
+}
+
+func countRangeLoads(fn llvm.Value) int {
+	kind := llvm.MDKindID("range")
+	count := 0
+	for bb := fn.FirstBasicBlock(); !bb.IsNil(); bb = llvm.NextBasicBlock(bb) {
+		for inst := bb.FirstInstruction(); !inst.IsNil(); inst = llvm.NextInstruction(inst) {
+			if !inst.IsALoadInst().IsNil() && !inst.Metadata(kind).IsNil() {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func removeRangeMetadata(mod llvm.Module) {
+	kind := llvm.MDKindID("range")
+	for fn := mod.FirstFunction(); !fn.IsNil(); fn = llvm.NextFunction(fn) {
+		for bb := fn.FirstBasicBlock(); !bb.IsNil(); bb = llvm.NextBasicBlock(bb) {
+			for inst := bb.FirstInstruction(); !inst.IsNil(); inst = llvm.NextInstruction(inst) {
+				if !inst.IsALoadInst().IsNil() {
+					inst.SetMetadata(kind, llvm.Metadata{})
+				}
+			}
+		}
+	}
+}

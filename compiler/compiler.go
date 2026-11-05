@@ -1864,7 +1864,48 @@ func (b *builder) loadFromStorage(ptr llvm.Value, typ types.Type, name string) l
 	if b.isIndirectAggregate(llvmType) {
 		return b.copyToIndirectStorage(ptr, llvmType, name)
 	}
-	return b.CreateLoad(llvmType, ptr, name)
+	if !hasLengthFields(typ) {
+		return b.CreateLoad(llvmType, ptr, name)
+	}
+	// Load each field so the lengths can get !range metadata, which is not
+	// permitted on an aggregate load.
+	value := llvm.Undef(llvmType)
+	for i, fieldType := range llvmType.StructElementTypes() {
+		field := b.CreateLoad(fieldType, b.CreateStructGEP(llvmType, ptr, i, ""), "")
+		if i != 0 {
+			b.addLengthRangeMetadata(field)
+		}
+		value = b.CreateInsertValue(value, field, i, name)
+	}
+	return value
+}
+
+// hasLengthFields reports whether typ is a slice or string, where every field
+// after the data pointer is a length or capacity.
+func hasLengthFields(typ types.Type) bool {
+	switch typ := typ.Underlying().(type) {
+	case *types.Slice:
+		return true
+	case *types.Basic:
+		return typ.Info()&types.IsString != 0
+	}
+	return false
+}
+
+// addLengthRangeMetadata marks the integer load as a Go length, which is never
+// negative.
+func (c *compilerContext) addLengthRangeMetadata(load llvm.Value) {
+	t := load.Type()
+	// maxSliceSize permits a full-width length when uintptr is narrower than int.
+	if t.IntTypeWidth() < c.intType.IntTypeWidth() {
+		return
+	}
+	bits := t.IntTypeWidth()
+	nonNegative := c.ctx.MDNode([]llvm.Metadata{
+		llvm.ConstInt(t, 0, false).ConstantAsMetadata(),
+		llvm.ConstInt(t, uint64(1)<<(bits-1), false).ConstantAsMetadata(),
+	})
+	load.SetMetadata(c.ctx.MDKindID("range"), nonNegative)
 }
 
 func (b *builder) getValueField(value ssa.Value, index int, resultType types.Type, name string) (llvm.Value, bool) {

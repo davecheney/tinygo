@@ -1242,12 +1242,12 @@ entry:
   br i1 %0, label %deref.throw, label %deref.next
 
 deref.next:                                       ; preds = %entry
-  %.unpack = load ptr, ptr %s, align 4
-  %.elt1 = getelementptr inbounds nuw i8, ptr %s, i32 4
-  %.unpack2 = load i32, ptr %.elt1, align 4
-  call void @runtime.trackPointer(ptr %.unpack, ptr nonnull %stackalloc, ptr undef) #4
-  %1 = call i1 @runtime.stringEqual(ptr %a.data, i32 %a.len, ptr %.unpack, i32 %.unpack2, ptr undef) #4
-  ret i1 %1
+  %1 = load ptr, ptr %s, align 4
+  %2 = getelementptr inbounds nuw i8, ptr %s, i32 4
+  %3 = load i32, ptr %2, align 4, !range !0
+  call void @runtime.trackPointer(ptr %1, ptr nonnull %stackalloc, ptr undef) #4
+  %4 = call i1 @runtime.stringEqual(ptr %a.data, i32 %a.len, ptr %1, i32 %3, ptr undef) #4
+  ret i1 %4
 
 deref.throw:                                      ; preds = %entry
   call void @runtime.nilPanic(ptr undef) #4
@@ -1265,13 +1265,13 @@ entry:
   br i1 %0, label %deref.throw, label %deref.next
 
 deref.next:                                       ; preds = %entry
-  %.unpack = load ptr, ptr %s, align 4
-  %.elt1 = getelementptr inbounds nuw i8, ptr %s, i32 4
-  %.unpack2 = load i32, ptr %.elt1, align 4
-  call void @runtime.trackPointer(ptr %.unpack, ptr nonnull %stackalloc, ptr undef) #4
+  %1 = load ptr, ptr %s, align 4
+  %2 = getelementptr inbounds nuw i8, ptr %s, i32 4
+  %3 = load i32, ptr %2, align 4, !range !0
+  call void @runtime.trackPointer(ptr %1, ptr nonnull %stackalloc, ptr undef) #4
   call void @runtime.trackPointer(ptr %a.data, ptr nonnull %stackalloc, ptr undef) #4
-  %1 = call i1 @runtime.stringEqual(ptr %.unpack, i32 %.unpack2, ptr %a.data, i32 %a.len, ptr undef) #4
-  ret i1 %1
+  %4 = call i1 @runtime.stringEqual(ptr %1, i32 %3, ptr %a.data, i32 %a.len, ptr undef) #4
+  ret i1 %4
 
 deref.throw:                                      ; preds = %entry
   call void @runtime.nilPanic(ptr undef) #4
@@ -1368,3 +1368,5 @@ attributes #1 = { nounwind "target-features"="+bulk-memory,+bulk-memory-opt,+cal
 attributes #2 = { noinline nounwind "target-features"="+bulk-memory,+bulk-memory-opt,+call-indirect-overlong,+mutable-globals,+nontrapping-fptoint,+sign-ext,-multivalue,-reference-types" }
 attributes #3 = { allockind("alloc,zeroed") allocsize(0) "alloc-family"="runtime.alloc" "target-features"="+bulk-memory,+bulk-memory-opt,+call-indirect-overlong,+mutable-globals,+nontrapping-fptoint,+sign-ext,-multivalue,-reference-types" }
 attributes #4 = { nounwind }
+
+!0 = !{i32 0, i32 -2147483648}
