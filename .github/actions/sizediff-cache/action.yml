@@ -37,4 +37,4 @@ runs:
       uses: actions/cache/restore@v5
       with:
         path: drivers/sizes-dev.txt
-        key: sizediff-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.base-sha }}-${{ steps.environment.outputs.drivers_sha }}-${{ steps.environment.outputs.go_version }}-${{ steps.environment.outputs.image_version }}-${{ hashFiles('.github/actions/setup-llvm/action.yml') }}
+        key: sizediff-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.base-sha }}-${{ steps.environment.outputs.drivers_sha }}-${{ steps.environment.outputs.go_version }}-${{ steps.environment.outputs.image_version }}

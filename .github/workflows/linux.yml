@@ -170,6 +170,24 @@ jobs:
           name: tinygo_${{ steps.version.outputs.version }}_amd64.deb
           path: /tmp/tinygo_${{ steps.version.outputs.version }}_amd64.deb
           archive: false
+  sizediff:
+    if: github.event_name == 'pull_request'
+    needs: build-linux
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    uses: ./.github/workflows/sizediff.yml
+    with:
+      version: ${{ needs.build-linux.outputs.version }}
+  sizediff-base:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: build-linux
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sizediff-base.yml
+    with:
+      version: ${{ needs.build-linux.outputs.version }}
   test-linux-build:
     # Test the binaries built in the build-linux job by running the smoke tests.
     runs-on: ubuntu-latest

@@ -3,13 +3,11 @@ name: Binary size baseline
 # PR caches are scoped to their merge ref.
 # https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache
 on:
-  push:
-    branches:
-      - dev
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
 
 jobs:
   baseline:
@@ -23,7 +21,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          submodules: true
           persist-credentials: false
       - name: Install Go
         uses: actions/setup-go@v6
@@ -42,26 +39,31 @@ jobs:
         run: |
           echo "GOCACHE=$RUNNER_TEMP/go-build-base" >> "$GITHUB_ENV"
           echo "XDG_CACHE_HOME=$RUNNER_TEMP/cache-base" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/setup-llvm
-        if: steps.base-cache.outputs.cache-hit != 'true'
-        with:
-          save-cache: "false"
       - name: Cache Go modules
         if: steps.base-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v5
         with:
           key: sizediff-base-go-modules-v1-${{ hashFiles('go.sum', 'drivers/go.sum') }}
           path: ~/go/pkg/mod
-      - run: make gen-device -j4
+      - name: Download release artifact
         if: steps.base-cache.outputs.cache-hit != 'true'
-      - name: Build tinygo binary for the dev branch
+        uses: actions/download-artifact@v8
+        with:
+          name: tinygo${{ inputs.version }}.linux-amd64.tar.gz
+          path: ${{ runner.temp }}/tinygo-base-artifact
+      - name: Extract release tarball
         if: steps.base-cache.outputs.cache-hit != 'true'
-        run: make tinygo
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/tinygo-base"
+          tar -C "$RUNNER_TEMP/tinygo-base" -xf "$RUNNER_TEMP/tinygo-base-artifact/tinygo$VERSION.linux-amd64.tar.gz"
+          echo "$RUNNER_TEMP/tinygo-base/tinygo/bin" >> "$GITHUB_PATH"
+          echo "TINYGOROOT=$RUNNER_TEMP/tinygo-base/tinygo" >> "$GITHUB_ENV"
       - name: Determine binary sizes on the dev branch
         if: steps.base-cache.outputs.cache-hit != 'true'
         run: |
           set -o pipefail
-          export PATH="$PWD/build:$PATH"
           (cd drivers; make smoke-test | tee sizes-dev.txt)
           test -s drivers/sizes-dev.txt
       - name: Save dev sizes
