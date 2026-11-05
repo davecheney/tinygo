@@ -165,14 +165,8 @@ func (c *compilerContext) getFunction(fn *ssa.Function) (llvm.Type, llvm.Value) 
 			readonly := c.ctx.CreateEnumAttribute(llvm.AttributeKindID("readonly"), 0)
 			llvmFn.AddAttributeAtIndex(i+1, readonly)
 		}
-		if !info.exported && info.wasmExport == "" && paramInfo.flags&paramIsLength != 0 && paramInfo.llvmType.TypeKind() == llvm.IntegerTypeKind &&
-			paramInfo.llvmType.IntTypeWidth() >= c.intType.IntTypeWidth() {
-			// maxSliceSize permits a full-width length when uintptr is narrower than int.
-			bits := uint(paramInfo.llvmType.IntTypeWidth())
-			nonNegative := c.ctx.CreateConstantRangeAttribute(llvm.AttributeKindID("range"), bits, []uint64{0}, []uint64{uint64(1) << (bits - 1)})
-			if !nonNegative.IsNil() {
-				llvmFn.AddAttributeAtIndex(i+1, nonNegative)
-			}
+		if !info.exported && info.wasmExport == "" && paramInfo.flags&paramIsLength != 0 {
+			c.addLengthRangeAttribute(llvmFn, i+1)
 		}
 	}
 
@@ -207,10 +201,20 @@ func (c *compilerContext) getFunction(fn *ssa.Function) (llvm.Type, llvm.Value) 
 		// > allocsize argument to signify "not present."
 		llvmFn.AddFunctionAttr(c.ctx.CreateEnumAttribute(llvm.AttributeKindID("allocsize"), 0x0000_0000_ffff_ffff))
 	case "runtime.sliceAppend":
+		// srcLen, srcCap, and elemsLen come from Go slices.
+		for _, i := range []int{3, 4, 5} {
+			c.addLengthRangeAttribute(llvmFn, i)
+		}
 		// Appending a slice will only read the to-be-appended slice, it won't
 		// be modified.
 		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
 		llvmFn.AddAttributeAtIndex(2, c.ctx.CreateEnumAttribute(llvm.AttributeKindID("readonly"), 0))
+	case "runtime.sliceGrow":
+		// oldLen and oldCap come from a Go slice. newCap is a sum that is not
+		// checked for overflow, so it does not get the attribute.
+		for _, i := range []int{2, 3} {
+			c.addLengthRangeAttribute(llvmFn, i)
+		}
 	case "runtime.stringFromBytes":
 		llvmFn.AddAttributeAtIndex(1, c.ctx.CreateEnumAttribute(llvm.AttributeKindID(llvmutil.NoCaptureAttrName()), 0))
 		llvmFn.AddAttributeAtIndex(1, c.ctx.CreateEnumAttribute(llvm.AttributeKindID("readonly"), 0))
@@ -333,6 +337,21 @@ func (c *compilerContext) maybeCreateSyntheticFunction(fn *ssa.Function, llvmFn 
 		irbuilder.Dispose()
 		llvmFn.SetLinkage(llvm.LinkOnceODRLinkage)
 		llvmFn.SetUnnamedAddr(true)
+	}
+}
+
+// addLengthRangeAttribute marks the integer parameter at index as a Go length,
+// which is never negative.
+func (c *compilerContext) addLengthRangeAttribute(llvmFn llvm.Value, index int) {
+	t := llvmFn.Param(index - 1).Type()
+	// maxSliceSize permits a full-width length when uintptr is narrower than int.
+	if t.TypeKind() != llvm.IntegerTypeKind || t.IntTypeWidth() < c.intType.IntTypeWidth() {
+		return
+	}
+	bits := uint(t.IntTypeWidth())
+	nonNegative := c.ctx.CreateConstantRangeAttribute(llvm.AttributeKindID("range"), bits, []uint64{0}, []uint64{uint64(1) << (bits - 1)})
+	if !nonNegative.IsNil() {
+		llvmFn.AddAttributeAtIndex(index, nonNegative)
 	}
 }
 

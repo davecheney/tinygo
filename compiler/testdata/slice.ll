@@ -69,7 +69,7 @@ entry:
 ; Function Attrs: allockind("alloc,zeroed") allocsize(0)
 declare noalias nonnull ptr @runtime.alloc(i32, ptr, ptr) #2
 
-declare { ptr, i32, i32 } @runtime.sliceAppend(ptr, ptr nocapture readonly, i32, i32, i32, i32, ptr, ptr) #0
+declare { ptr, i32, i32 } @runtime.sliceAppend(ptr, ptr nocapture readonly, i32 range(i32 0, -2147483648), i32 range(i32 0, -2147483648), i32 range(i32 0, -2147483648), i32, ptr, ptr) #0
 
 ; Function Attrs: nounwind
 define hidden { ptr, i32, i32 } @main.sliceAppendSlice(ptr %ints.data, i32 range(i32 0, -2147483648) %ints.len, i32 range(i32 0, -2147483648) %ints.cap, ptr %added.data, i32 range(i32 0, -2147483648) %added.len, i32 range(i32 0, -2147483648) %added.cap, ptr %context) unnamed_addr #1 {

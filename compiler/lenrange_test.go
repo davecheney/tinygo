@@ -309,3 +309,63 @@ func removeRangeAttributes(mod llvm.Module) {
 		}
 	}
 }
+
+// Runtime helpers receive Go lengths as uintptr or runtime._string values.
+func TestLengthRangeRuntimeDeclarations(t *testing.T) {
+	targets := []struct {
+		name    string
+		options *compileopts.Options
+	}{
+		{"wasm", &compileopts.Options{Target: "wasm"}},
+		{"amd64", &compileopts.Options{GOOS: "linux", GOARCH: "amd64"}},
+	}
+	params := []struct {
+		function string
+		index    int
+		length   bool
+	}{
+		{"runtime.sliceAppend", 1, false}, // srcBuf
+		{"runtime.sliceAppend", 2, false}, // elemsBuf
+		{"runtime.sliceAppend", 3, true},  // srcLen
+		{"runtime.sliceAppend", 4, true},  // srcCap
+		{"runtime.sliceAppend", 5, true},  // elemsLen
+		{"runtime.sliceAppend", 6, false}, // elemSize
+		{"runtime.sliceGrow", 2, true},    // oldLen
+		{"runtime.sliceGrow", 3, true},    // oldCap
+		{"runtime.sliceGrow", 4, false},   // newCap
+		{"runtime.sliceGrow", 5, false},   // elemSize
+		{"runtime.stringConcat", 1, false},
+		{"runtime.stringConcat", 2, true},
+		{"runtime.stringConcat", 3, false},
+		{"runtime.stringConcat", 4, true},
+		{"runtime.stringToBytes", 1, false},
+		{"runtime.stringToBytes", 2, true},
+	}
+
+	for _, target := range targets {
+		t.Run(target.name, func(t *testing.T) {
+			mod, errs := testCompilePackage(t, target.options, "lenrange-runtime.go")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			defer mod.Dispose()
+
+			kind := llvm.AttributeKindID("range")
+			for _, param := range params {
+				fn := mod.NamedFunction(param.function)
+				if fn.IsNil() {
+					t.Errorf("missing function %s", param.function)
+					continue
+				}
+				hasRange := kind != 0 && !fn.GetEnumAttributeAtIndex(param.index, kind).IsNil()
+				wantRange := param.length && llvmutil.Version() >= 19
+				if hasRange != wantRange {
+					t.Errorf("%s parameter %d: range attribute = %t, want %t:\n%s", param.function, param.index, hasRange, wantRange, fn.String())
+				}
+			}
+			if err := llvm.VerifyModule(mod, llvm.ReturnStatusAction); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

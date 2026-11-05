@@ -705,7 +705,7 @@ func (c *compilerContext) flattenAggregateType(t llvm.Type, name string, goType 
 			}
 			suffix := strconv.Itoa(i)
 			isString := false
-			isLength := false
+			isLength := goType != nil && i != 0 && isRuntimeString(goType)
 			if goType != nil {
 				// Try to come up with a good suffix for this struct field,
 				// depending on which Go type it's based on.
@@ -743,6 +743,17 @@ func (c *compilerContext) flattenAggregateType(t llvm.Type, name string, goType 
 	default:
 		return []paramInfo{c.getParamInfo(t, name, goType)}
 	}
+}
+
+// isRuntimeString reports whether t is runtime._string, the runtime's view of a
+// Go string.
+func isRuntimeString(t types.Type) bool {
+	named, ok := t.(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := named.Obj()
+	return obj.Pkg() != nil && obj.Pkg().Path() == "runtime" && obj.Name() == "_string"
 }
 
 // getParamInfo collects information about a parameter. For example, if this
