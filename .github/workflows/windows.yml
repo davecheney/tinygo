@@ -32,6 +32,7 @@ jobs:
         shell: bash
         run: ./.github/workflows/tinygo-extract-version.sh | tee -a "$GITHUB_OUTPUT"
       - name: Install Go
+        id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version: '1.27.1'
@@ -84,13 +85,18 @@ jobs:
         with:
           key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
           path: llvm-build
-      - name: Cache Go cache
+      - name: Cache Go modules
         uses: actions/cache@v5
         with:
-          key: go-cache-windows-v3-${{ hashFiles('go.mod') }}
-          path: |
-            C:/Users/runneradmin/AppData/Local/go-build
-            C:/Users/runneradmin/go/pkg/mod
+          key: go-mod-windows-${{ hashFiles('go.sum') }}
+          path: C:/Users/runneradmin/go/pkg/mod
+      - name: Restore Go build cache
+        id: go-build
+        uses: actions/cache/restore@v5
+        with:
+          key: go-build-windows-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('llvm-version.txt') }}-${{ github.sha }}
+          restore-keys: go-build-windows-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('llvm-version.txt') }}-
+          path: C:/Users/runneradmin/AppData/Local/go-build
       - name: make gen-device
         run: make -j3 gen-device
       - name: Test TinyGo
@@ -99,6 +105,12 @@ jobs:
       - name: Build TinyGo release tarball
         shell: bash
         run: make build/release -j4
+      - name: Save Go build cache
+        if: ${{ !cancelled() && steps.go-build.outputs.cache-hit != 'true' && github.event_name == 'push' }}
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ steps.go-build.outputs.cache-primary-key }}
+          path: C:/Users/runneradmin/AppData/Local/go-build
       - name: Make release artifact
         shell: bash
         working-directory: build/release

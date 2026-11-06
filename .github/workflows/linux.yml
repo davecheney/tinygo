@@ -78,13 +78,21 @@ jobs:
       - name: Extract TinyGo version
         id: version
         run: ./.github/workflows/tinygo-extract-version.sh | tee -a "$GITHUB_OUTPUT"
-      - name: Cache Go
+      - name: Identify Go version
+        id: go
+        run: echo "version=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - name: Cache Go modules
         uses: actions/cache@v5
         with:
-          key: go-cache-linux-alpine-v2-${{ hashFiles('go.mod') }}
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+          key: go-mod-linux-alpine-${{ hashFiles('go.sum') }}
+          path: ~/go/pkg/mod
+      - name: Restore Go build cache
+        id: go-build
+        uses: actions/cache/restore@v5
+        with:
+          key: go-build-linux-alpine-${{ steps.go.outputs.version }}-${{ hashFiles('llvm-version.txt') }}-${{ github.sha }}
+          restore-keys: go-build-linux-alpine-${{ steps.go.outputs.version }}-${{ hashFiles('llvm-version.txt') }}-
+          path: ~/.cache/go-build
       - name: Restore LLVM source cache
         uses: actions/cache/restore@v5
         id: cache-llvm-source
@@ -158,6 +166,12 @@ jobs:
           make release deb -j3 STATIC=1
           cp -p build/release.tar.gz /tmp/tinygo${{ steps.version.outputs.version }}.linux-amd64.tar.gz
           cp -p build/release.deb    /tmp/tinygo_${{ steps.version.outputs.version }}_amd64.deb
+      - name: Save Go build cache
+        if: ${{ !cancelled() && steps.go-build.outputs.cache-hit != 'true' && github.event_name == 'push' }}
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ steps.go-build.outputs.cache-primary-key }}
+          path: ~/.cache/go-build
       - name: "Publish release artifact: tarball"
         uses: actions/upload-artifact@v7
         with:

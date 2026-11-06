@@ -58,13 +58,18 @@ jobs:
         with:
           key: ${{ steps.cache-llvm-source.outputs.cache-primary-key }}
           path: llvm-project/compiler-rt
-      - name: Go cache
+      - name: Cache Go modules
         uses: actions/cache@v5
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-build-${{ steps.setup-go.outputs.go-version }}-llvm${{ env.LLVM }}-${{ hashFiles('go.sum') }}
+          key: go-mod-compat-${{ hashFiles('go.sum') }}
+          path: ~/go/pkg/mod
+      - name: Restore Go build cache
+        id: go-build
+        uses: actions/cache/restore@v5
+        with:
+          key: go-build-compat-${{ steps.setup-go.outputs.go-version }}-llvm${{ env.LLVM }}-${{ github.sha }}
+          restore-keys: go-build-compat-${{ steps.setup-go.outputs.go-version }}-llvm${{ env.LLVM }}-
+          path: ~/.cache/go-build
       - name: Build TinyGo
         run: go install -tags=llvm${{ env.LLVM }}
       - run: tinygo version
@@ -72,3 +77,9 @@ jobs:
       - run: go test -tags=llvm${{ env.LLVM }} -short -skip=TestErrors
       - run: go test -tags=llvm${{ env.LLVM }} -run TestTrimPath -target=darwin/amd64
       - run: make smoketest-quick XTENSA=0
+      - name: Save Go build cache
+        if: ${{ !cancelled() && steps.go-build.outputs.cache-hit != 'true' && github.event_name == 'push' }}
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ steps.go-build.outputs.cache-primary-key }}
+          path: ~/.cache/go-build

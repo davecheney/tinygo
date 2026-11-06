@@ -23,6 +23,7 @@ jobs:
           fetch-depth: 2 # HEAD^1 of the merge commit is the dev base
           submodules: true
       - name: Install Go
+        id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -30,13 +31,18 @@ jobs:
       - uses: ./.github/actions/setup-llvm
         with:
           save-cache: "false"
-      - name: Cache Go
+      - name: Cache Go modules
         uses: actions/cache@v5
         with:
-          key: go-cache-linux-sizediff-v2-${{ hashFiles('go.mod') }}
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+          key: go-mod-sizediff-${{ hashFiles('go.sum') }}
+          path: ~/go/pkg/mod
+      - name: Restore Go build cache
+        id: go-build
+        uses: actions/cache/restore@v5
+        with:
+          key: go-build-sizediff-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('llvm-version.txt') }}-${{ github.sha }}
+          restore-keys: go-build-sizediff-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('llvm-version.txt') }}-
+          path: ~/.cache/go-build
       - uses: ./.github/actions/gen-device
       - name: Download drivers repo
         run: git clone https://github.com/tinygo-org/drivers.git
@@ -52,6 +58,12 @@ jobs:
       # Compute sizes for the PR branch
       - name: Build tinygo binary for the PR branch
         run: make tinygo
+      - name: Save Go build cache
+        if: ${{ !cancelled() && steps.go-build.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ steps.go-build.outputs.cache-primary-key }}
+          path: ~/.cache/go-build
       - name: Determine binary sizes on the PR branch
         run: |
           set -o pipefail
