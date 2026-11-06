@@ -6,4 +6,4 @@
 // not linked in. See https://github.com/tinygo-org/tinygo/issues/6039.
 package strconv
 
-//go:generate go run ../../../tools/gen-strconv
+//go:generate go run ../../../tools/gen-stdlib internal/strconv
