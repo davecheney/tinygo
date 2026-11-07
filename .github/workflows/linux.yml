@@ -6,6 +6,7 @@ on:
     branches:
       - dev
       - release
+      - smoketest-j2
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
