@@ -1334,7 +1334,7 @@ func (c *compilerContext) getInterfaceInvokeWrapper(fn *ssa.Function, llvmFnType
 		return wrapper
 	}
 
-	exported := c.getFunctionInfo(fn).exported
+	exported := c.getFunctionInfo(fn).isExported()
 	abi := c.getFunctionABI(fn.Signature, exported)
 	if exported {
 		internalABI := c.getFunctionABI(fn.Signature, false)

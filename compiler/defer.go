@@ -452,7 +452,7 @@ func (b *builder) createDefer(instr *ssa.Defer) {
 		// Collect all values to be put in the struct (starting with
 		// runtime._defer fields).
 		values = newLLVMValueList(callback, next)
-		exported := b.getFunctionInfo(callee).exported
+		exported := b.getFunctionInfo(callee).isExported()
 		abi := b.getFunctionABI(callee.Signature, exported)
 		values.append(b.getCallArguments(instr.Call.Args, abi.params)...)
 
@@ -679,7 +679,7 @@ func (b *builder) createRunDefers() {
 
 			// Get the real defer struct type and cast to it.
 			valueTypes := []llvm.Type{b.uintptrType, b.dataPtrType}
-			exported := b.getFunctionInfo(callback).exported
+			exported := b.getFunctionInfo(callback).isExported()
 			abi := b.getFunctionABI(callback.Signature, exported)
 			valueTypes = b.appendStoredParamTypes(valueTypes, abi.params)
 			deferredCallType := b.ctx.StructType(valueTypes, false)
