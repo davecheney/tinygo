@@ -35,13 +35,13 @@ func stringEqual(x, y string) bool {
 
 // Return true iff x < y.
 //
-//go:nobounds
+//go:nopanic index
 func stringLess(x, y string) bool {
-	l := len(x)
-	if m := len(y); m < l {
+	l := uint(len(x))
+	if m := uint(len(y)); m < l {
 		l = m
 	}
-	for i := 0; i < l; i++ {
+	for i := uint(0); i < l; i++ {
 		if x[i] < y[i] {
 			return true
 		}

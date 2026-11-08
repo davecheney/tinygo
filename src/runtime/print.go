@@ -8,9 +8,9 @@ type stringer interface {
 	String() string
 }
 
-//go:nobounds
+//go:nopanic index
 func printstring(s string) {
-	for i := 0; i < len(s); i++ {
+	for i := uint(0); i < uint(len(s)); i++ {
 		putchar(s[i])
 	}
 }
@@ -72,16 +72,16 @@ func printint32(n int32) {
 	printuint32(uint32(n))
 }
 
-//go:nobounds
+//go:nopanic index
 func printuint64(n uint64) {
 	digits := [20]byte{} // enough to hold (2^64)-1
 	// Fill in all 10 digits.
-	firstdigit := 19 // digit index that isn't zero (by default, the last to handle '0' correctly)
+	firstdigit := uint(19) // digit index that isn't zero (by default, the last to handle '0' correctly)
 	for i := 19; i >= 0; i-- {
 		digit := byte(n%10 + '0')
 		digits[i] = digit
 		if digit != '0' {
-			firstdigit = i
+			firstdigit = uint(i)
 		}
 		n /= 10
 	}
