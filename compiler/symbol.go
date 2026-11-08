@@ -34,6 +34,7 @@ type functionInfo struct {
 	exported      bool       // go:export, CGo
 	interrupt     bool       // go:interrupt
 	nobounds      bool       // go:nobounds
+	nopanicIndex  bool       // go:nopanic index
 	noescape      bool       // go:noescape
 	noheap        bool       // go:noheap
 	noruntime     bool       // go:noruntime
@@ -582,6 +583,24 @@ func (c *compilerContext) parsePragmas(info *functionInfo, f *ssa.Function) {
 			// that import unsafe.
 			if c.checkDefinition(hasBody, comment, pragma) && c.checkUnsafe(f.Pkg, comment, pragma) {
 				info.nobounds = true
+			}
+		case "//go:nopanic":
+			// The optimizer must prove the checks of the given kinds.
+			// transform.CheckNoPanic reports each check that it does not prove.
+			if len(parts) != 2 {
+				c.addPragmaError(comment, fmt.Sprintf("expected one parameter to //go:nopanic, not %d", len(parts)-1))
+				continue
+			}
+			if !c.checkDefinition(hasBody, comment, pragma) {
+				continue
+			}
+			for kind := range strings.SplitSeq(parts[1], ",") {
+				switch kind {
+				case "index":
+					info.nopanicIndex = true
+				default:
+					c.addPragmaError(comment, fmt.Sprintf("unknown //go:nopanic kind %q", kind))
+				}
 			}
 		case "//go:noescape":
 			// Don't let pointer parameters escape.
