@@ -68,8 +68,9 @@ type Options struct {
 	WITPackage              string // pass through to wasm-tools component embed invocation
 	WITWorld                string // pass through to wasm-tools component embed -w option
 	ExtLDFlags              []string
-	GoCompatibility         bool   // enable to check for Go version compatibility
-	BuildVCS                string // -buildvcs: "auto" (default), "true" or "false"
+	GoCompatibility         bool     // enable to check for Go version compatibility
+	BuildVCS                string   // -buildvcs: "auto" (default), "true" or "false"
+	Env                     []string // environment for the go command, linker and other tools, and the source of CGO_* flags
 }
 
 // Verify performs a validation on the given options, raising an error if options are not valid.

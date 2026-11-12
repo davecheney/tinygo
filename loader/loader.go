@@ -175,7 +175,7 @@ func load(config *compileopts.Config, inputs []string, typeChecker types.Config,
 	}
 	if config.TestConfig.StandardPackage {
 		cmd.Dir = wd
-		cmd.Env = append(cmd.Env, "GOWORK=off")
+		cmd.Env = appendPWD(append(cmd.Env, "GOWORK=off"), wd)
 	}
 	buf := &bytes.Buffer{}
 	cmd.Stdout = buf
@@ -878,7 +878,7 @@ func (p *Package) parseFiles() ([]*ast.File, error) {
 			{"CGO_CFLAGS", &env.CFlags},
 			{"CGO_CXXFLAGS", &env.CXXFlags},
 		} {
-			flags, err := goenv.SplitFlags(goenv.Get(v.name))
+			flags, err := goenv.SplitFlags(getenv(p.program.config.Options.Env, v.name))
 			if err != nil {
 				return nil, fmt.Errorf("failed to split %s: %w", v.name, err)
 			}
@@ -1203,4 +1203,14 @@ func (p *Package) resolveImportPath(to string) string {
 		return newTo
 	}
 	return to
+}
+
+// getenv returns the value of key in env. The last value wins, as in exec.Cmd.
+func getenv(env []string, key string) string {
+	for i := len(env) - 1; i >= 0; i-- {
+		if value, ok := strings.CutPrefix(env[i], key+"="); ok {
+			return value
+		}
+	}
+	return ""
 }

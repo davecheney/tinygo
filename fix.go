@@ -40,6 +40,7 @@ func runFix(args []string, stdout, stderr io.Writer) int {
 	diff := set.Bool("diff", false, "print a unified diff without writing files")
 	includeTests := set.Bool("tests", true, "include test files when analyzing packages")
 	options := &compileopts.Options{
+		Env:  os.Environ(),
 		GOOS: goenv.Get("GOOS"), GOARCH: goenv.Get("GOARCH"),
 		GOARM: goenv.Get("GOARM"), GOMIPS: goenv.Get("GOMIPS"),
 		GoCompatibility: true, Opt: "z", PanicStrategy: "print",

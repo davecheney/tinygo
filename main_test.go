@@ -31,6 +31,7 @@ import (
 	"github.com/tinygo-org/tinygo/diagnostics"
 	"github.com/tinygo-org/tinygo/goenv"
 	"github.com/tinygo-org/tinygo/internal/diff"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 )
 
 const TESTDATA = "testdata"
@@ -39,7 +40,7 @@ var testTarget = flag.String("target", "", "override test target")
 
 func TestBuildAndRunBuildErrorReturnsNil(t *testing.T) {
 	config := &compileopts.Config{
-		Options: &compileopts.Options{Semaphore: sema},
+		Options: &compileopts.Options{Env: testenv.Environ(), Semaphore: sema},
 		Target:  &compileopts.TargetSpec{Libc: "unknown"},
 	}
 	result, err := buildAndRun("", config, io.Discard, nil, nil, 0, func(cmd *exec.Cmd, result *builder.BuildResult) error {
@@ -55,7 +56,7 @@ func TestBuildAndRunBuildErrorReturnsNil(t *testing.T) {
 }
 
 func TestFlashRejectsUnsupportedFirmwareExtension(t *testing.T) {
-	err := Flash("testdata/print.go", "", "firmware.bin", &compileopts.Options{Target: "pico", Semaphore: sema})
+	err := Flash("testdata/print.go", "", "firmware.bin", &compileopts.Options{Env: testenv.Environ(), Target: "pico", Semaphore: sema})
 	want := "target pico does not support firmware output extension .bin; use .elf, .hex, or .uf2"
 	if err == nil || err.Error() != want {
 		t.Fatalf("Flash() error = %v, want %q", err, want)
@@ -63,7 +64,7 @@ func TestFlashRejectsUnsupportedFirmwareExtension(t *testing.T) {
 }
 
 func TestValidateSupportedFirmwareOutput(t *testing.T) {
-	config, err := builder.NewConfig(&compileopts.Options{Target: "pico", Opt: "z", Semaphore: sema})
+	config, err := builder.NewConfig(&compileopts.Options{Env: testenv.Environ(), Target: "pico", Opt: "z", Semaphore: sema})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestBuildOutputDirectoryWithFirmwareSuffix(t *testing.T) {
 	if err := os.Mkdir(outputDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	config, err := builder.NewConfig(&compileopts.Options{Target: "pico", Opt: "z", Semaphore: sema})
+	config, err := builder.NewConfig(&compileopts.Options{Env: testenv.Environ(), Target: "pico", Opt: "z", Semaphore: sema})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +389,7 @@ func trimPathCommand(t *testing.T, dir string, args ...string) *exec.Cmd {
 	}
 	cmd := exec.Command(os.Args[0], append([]string{"test-main"}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(testenv.Environ(),
 		"TINYGOROOT="+goenv.Get("TINYGOROOT"),
 		"GOPATH="+goenv.Get("GOPATH"),
 		"GOOS="+options.GOOS,
@@ -537,6 +538,7 @@ func optionsFromTarget(target string, sema chan struct{}) compileopts.Options {
 		return optionsFromOSARCH(target, sema)
 	}
 	return compileopts.Options{
+		Env: testenv.Environ(),
 		// GOOS/GOARCH are only used if target == ""
 		GOOS:          goenv.Get("GOOS"),
 		GOARCH:        goenv.Get("GOARCH"),
@@ -557,6 +559,7 @@ func optionsFromTarget(target string, sema chan struct{}) compileopts.Options {
 func optionsFromOSARCH(osarch string, sema chan struct{}) compileopts.Options {
 	parts := strings.Split(osarch, "/")
 	options := compileopts.Options{
+		Env:           testenv.Environ(),
 		GOOS:          parts[0],
 		GOARCH:        parts[1],
 		Semaphore:     sema,
@@ -750,11 +753,6 @@ func TestMain(m *testing.M) {
 			main()
 			os.Exit(0)
 		}
-	}
-
-	// make test sets these to build TinyGo against the host LLVM.
-	for _, name := range []string{"CGO_CPPFLAGS", "CGO_CFLAGS", "CGO_CXXFLAGS"} {
-		os.Unsetenv(name)
 	}
 
 	// Run normal tests.

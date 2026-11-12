@@ -15,6 +15,7 @@ import (
 
 	"github.com/tinygo-org/tinygo/compileopts"
 	"github.com/tinygo-org/tinygo/goenv"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 )
 
 func TestCGoCompilerFlags(t *testing.T) {
@@ -47,9 +48,6 @@ import "C"
 		}
 	}
 	envInc := "-I" + filepath.Join(dir, "envinc")
-	t.Setenv("CGO_CPPFLAGS", "-DSHARED_ENV=1")
-	t.Setenv("CGO_CFLAGS", envInc+" -DC_ENV=1")
-	t.Setenv("CGO_CXXFLAGS", "-DCXX_ENV=1")
 	p := &Package{
 		PackageJSON: PackageJSON{Dir: dir, ImportPath: "probe", CgoFiles: []string{"probe.go"}},
 		FileHashes:  make(map[string][]byte),
@@ -57,7 +55,11 @@ import "C"
 			workingDir: dir,
 			fset:       token.NewFileSet(),
 			config: &compileopts.Config{
-				Options: &compileopts.Options{Opt: "0"},
+				Options: &compileopts.Options{Opt: "0", Env: []string{
+					"CGO_CPPFLAGS=-DSHARED_ENV=1",
+					"CGO_CFLAGS=" + envInc + " -DC_ENV=1",
+					"CGO_CXXFLAGS=-DCXX_ENV=1",
+				}},
 				Target: &compileopts.TargetSpec{
 					Triple: "armv6m-unknown-unknown-eabi", GOOS: "linux", GOARCH: "arm",
 				},
@@ -82,7 +84,6 @@ import "C"
 }
 
 func TestPackageTestContext(t *testing.T) {
-	t.Setenv("GOFLAGS", "")
 	dir := t.TempDir()
 	for name, content := range map[string]string{
 		"go.mod":        "module example.com/testcontext\n\ngo 1.25.0\n",
@@ -94,13 +95,15 @@ func TestPackageTestContext(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("GOWORK", filepath.Join(dir, "go.work"))
 	_, minor, err := goenv.GetGorootVersion()
 	if err != nil {
 		t.Fatal(err)
 	}
 	config := &compileopts.Config{
-		Options:        &compileopts.Options{Directory: dir},
+		Options: &compileopts.Options{
+			Directory: dir,
+			Env:       append(testenv.Environ(), "GOFLAGS=", "GOWORK="+filepath.Join(dir, "go.work")),
+		},
 		Target:         &compileopts.TargetSpec{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
 		GoMinorVersion: minor,
 		TestConfig:     compileopts.TestConfig{CompileTestBinary: true},
@@ -136,7 +139,6 @@ func TestPackageTestContext(t *testing.T) {
 }
 
 func TestPackageWorkingDirectory(t *testing.T) {
-	t.Setenv("GOFLAGS", "")
 	_, minor, err := goenv.GetGorootVersion()
 	if err != nil {
 		t.Fatal(err)
@@ -166,9 +168,11 @@ func TestPackageWorkingDirectory(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			t.Setenv("GOWORK", filepath.Join(dir, "go.work"))
 			config := &compileopts.Config{
-				Options:        &compileopts.Options{Directory: dir},
+				Options: &compileopts.Options{
+					Directory: dir,
+					Env:       append(testenv.Environ(), "GOFLAGS=", "GOWORK="+filepath.Join(dir, "go.work")),
+				},
 				Target:         &compileopts.TargetSpec{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
 				GoMinorVersion: minor,
 			}

@@ -1937,6 +1937,7 @@ func main() {
 	}
 
 	options := &compileopts.Options{
+		Env:                     os.Environ(),
 		GOOS:                    goenv.Get("GOOS"),
 		GOARCH:                  goenv.Get("GOARCH"),
 		GOARM:                   goenv.Get("GOARM"),

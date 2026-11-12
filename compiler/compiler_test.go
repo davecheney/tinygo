@@ -14,6 +14,7 @@ import (
 	"github.com/tinygo-org/tinygo/compiler/llvmutil"
 	"github.com/tinygo-org/tinygo/goenv"
 	"github.com/tinygo-org/tinygo/internal/ir"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 	"github.com/tinygo-org/tinygo/loader"
 	"github.com/tinygo-org/tinygo/transform"
 	"tinygo.org/x/go-llvm"
@@ -711,6 +712,7 @@ func testCompilePackage(t *testing.T, options *compileopts.Options, file string)
 }
 
 func testCompilePackageWithDebug(t *testing.T, options *compileopts.Options, file string, debug bool) (llvm.Module, []error) {
+	options.Env = testenv.Environ()
 	target, err := compileopts.LoadTarget(options)
 	if err != nil {
 		t.Fatal("failed to load target:", err)

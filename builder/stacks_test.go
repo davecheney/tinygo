@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tinygo-org/tinygo/compileopts"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 	"github.com/tinygo-org/tinygo/interp"
 )
 
@@ -12,6 +13,7 @@ import (
 // module must outlive the output job on a target without automatic stack sizes.
 func TestPrintStacksWithoutAutomaticStackSize(t *testing.T) {
 	options := compileopts.Options{
+		Env:                     testenv.Environ(),
 		Target:                  "wasip1",
 		Opt:                     "z",
 		Semaphore:               sema,

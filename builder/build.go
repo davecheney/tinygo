@@ -1023,11 +1023,11 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (*BuildR
 			if config.Options.PrintCommands != nil {
 				config.Options.PrintCommands(config.Target.Linker, ldflags...)
 			}
-			var linkEnv []string
+			linkEnv := config.Options.Env
 			if config.TrimPath() && config.LinkerFlavor() == "darwin" {
-				linkEnv = append(linkEnv, "ZERO_AR_DATE=1")
+				linkEnv = slices.Concat(linkEnv, []string{"ZERO_AR_DATE=1"})
 			}
-			err = link(config.Target.Linker, ldflags, linkEnv...)
+			err = link(config.Target.Linker, ldflags, linkEnv)
 			if err != nil {
 				return err
 			}
@@ -1092,6 +1092,7 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (*BuildR
 					config.Options.PrintCommands(wasmopt, args...)
 				}
 				cmd := exec.Command(wasmopt, args...)
+				cmd.Env = config.Options.Env
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 
@@ -1130,6 +1131,7 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (*BuildR
 					config.Options.PrintCommands(wasmtools, args...)
 				}
 				cmd := exec.Command(wasmtools, args...)
+				cmd.Env = config.Options.Env
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 
@@ -1152,6 +1154,7 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (*BuildR
 					config.Options.PrintCommands(wasmtools, args...)
 				}
 				cmd = exec.Command(wasmtools, args...)
+				cmd.Env = config.Options.Env
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/tinygo-org/tinygo/compileopts"
 	"github.com/tinygo-org/tinygo/goenv"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 )
 
 func TestAnalysisPath(t *testing.T) {
@@ -87,7 +88,7 @@ func TestAnalysisPatterns(t *testing.T) {
 		}
 	}
 	config := &compileopts.Config{
-		Options:        &compileopts.Options{Directory: dir},
+		Options:        &compileopts.Options{Directory: dir, Env: testenv.Environ()},
 		Target:         &compileopts.TargetSpec{Triple: "x86_64-unknown-linux", GOOS: "linux", GOARCH: "amd64"},
 		GoMinorVersion: 25,
 	}

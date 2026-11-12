@@ -12,6 +12,7 @@ import (
 	"github.com/tinygo-org/tinygo/compileopts"
 	"github.com/tinygo-org/tinygo/compiler"
 	"github.com/tinygo-org/tinygo/internal/ir"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 	"github.com/tinygo-org/tinygo/loader"
 	"tinygo.org/x/go-llvm"
 )
@@ -102,7 +103,7 @@ func compileGoFileForTesting(t *testing.T, filename string) llvm.Module {
 		t.Fatal("failed to load target:", err)
 	}
 	config := &compileopts.Config{
-		Options: &compileopts.Options{},
+		Options: &compileopts.Options{Env: testenv.Environ()},
 		Target:  target,
 	}
 	compilerConfig := &compiler.Config{

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/tinygo-org/tinygo/goenv"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 )
 
 func fixCommand(t *testing.T, dir string, args ...string) (int, string) {
@@ -19,7 +20,7 @@ func fixCommand(t *testing.T, dir string, args ...string) (int, string) {
 	}
 	cmd := exec.Command(os.Args[0], append([]string{"test-main", "fix"}, args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "TINYGOROOT="+root, "GOWORK=off", "GOFLAGS=")
+	cmd.Env = append(testenv.Environ(), "TINYGOROOT="+root, "GOWORK=off", "GOFLAGS=")
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		return 0, string(output)
@@ -81,7 +82,7 @@ func TestFixCommand(t *testing.T) {
 		}
 		cmd := exec.Command(filepath.Join(goenv.Get("GOROOT"), "bin", "go"), "fix", "-any")
 		cmd.Dir = reference
-		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+		cmd.Env = append(testenv.Environ(), "GOWORK=off", "GOFLAGS=")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("go fix: %v\n%s", err, output)
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/tinygo-org/tinygo/compiler"
 	"github.com/tinygo-org/tinygo/goenv"
 	"github.com/tinygo-org/tinygo/internal/diff"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 	"github.com/tinygo-org/tinygo/loader"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/checker"
@@ -54,6 +55,7 @@ func fixtureWithTests(t *testing.T, files map[string]string, includeTests bool, 
 	}
 	t.Chdir(dir)
 	config, err := builder.NewConfig(&compileopts.Options{
+		Env:  testenv.Environ(),
 		GOOS: goenv.Get("GOOS"), GOARCH: goenv.Get("GOARCH"), Opt: "z",
 		Semaphore: make(chan struct{}, 1),
 	})

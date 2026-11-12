@@ -15,6 +15,7 @@ import (
 	"github.com/tinygo-org/tinygo/compileopts"
 	"github.com/tinygo-org/tinygo/goenv"
 	"github.com/tinygo-org/tinygo/internal/diff"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 	"github.com/tinygo-org/tinygo/interp"
 )
 
@@ -309,6 +310,7 @@ func buildBinary(t *testing.T, targetString, pkgName string, trimPath bool) *Bui
 
 func buildBinaryInDir(targetString, pkgName, opt, tmpdir string, trimPath bool) (*BuildResult, error) {
 	options := compileopts.Options{
+		Env:                     testenv.Environ(),
 		Target:                  targetString,
 		Opt:                     opt,
 		Semaphore:               sema,

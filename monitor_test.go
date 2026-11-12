@@ -10,6 +10,7 @@ import (
 
 	"github.com/tinygo-org/tinygo/builder"
 	"github.com/tinygo-org/tinygo/compileopts"
+	"github.com/tinygo-org/tinygo/internal/testenv"
 )
 
 func TestTraceback(t *testing.T) {
@@ -22,6 +23,7 @@ func TestTraceback(t *testing.T) {
 	// Build a small binary that only panics.
 	tmpdir := t.TempDir()
 	config, err := builder.NewConfig(&compileopts.Options{
+		Env:           testenv.Environ(),
 		GOOS:          runtime.GOOS,
 		GOARCH:        runtime.GOARCH,
 		Opt:           "z",
