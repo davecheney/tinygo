@@ -51,8 +51,6 @@ typedef int (*tinygo_clang_visitor)(GoCXCursor *c, GoCXCursor *parent, CXClientD
 void tinygo_clang_getTranslationUnitCursor(CXTranslationUnit tu, GoCXCursor *result);
 unsigned tinygo_clang_visitChildren(const GoCXCursor *parent, tinygo_clang_visitor visitor, CXClientData client_data);
 CXString tinygo_clang_getCursorSpelling(const GoCXCursor *c);
-CXString tinygo_clang_getCursorPrettyPrinted(const GoCXCursor *c, CXPrintingPolicy policy);
-CXPrintingPolicy tinygo_clang_getCursorPrintingPolicy(const GoCXCursor *c);
 enum CXCursorKind tinygo_clang_getCursorKind(const GoCXCursor *c);
 void tinygo_clang_getCursorType(const GoCXCursor *c, CXType *result);
 void tinygo_clang_getTypeDeclaration(const CXType *t, GoCXCursor *result);
@@ -138,14 +136,6 @@ func clang_visitChildren(parent C.GoCXCursor, visitor C.tinygo_clang_visitor, cl
 
 func clang_getCursorSpelling(c C.GoCXCursor) C.CXString {
 	return C.tinygo_clang_getCursorSpelling(&c)
-}
-
-func clang_getCursorPrettyPrinted(c C.GoCXCursor, policy C.CXPrintingPolicy) C.CXString {
-	return C.tinygo_clang_getCursorPrettyPrinted(&c, policy)
-}
-
-func clang_getCursorPrintingPolicy(c C.GoCXCursor) C.CXPrintingPolicy {
-	return C.tinygo_clang_getCursorPrintingPolicy(&c)
 }
 
 func clang_getCursorKind(c C.GoCXCursor) C.enum_CXCursorKind {
@@ -437,7 +427,6 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 		numArgs := int(clang_Cursor_getNumArguments(c))
 		exportName := name
 		localName := name
-		var stringSignature string
 		if clang_Cursor_getStorageClass(c) == C.CX_SC_Static {
 			// A static function is assigned a globally unique symbol name based
 			// on the file path (like _Cgo_static_2d09198adbf58f4f4655_foo) and
@@ -448,16 +437,6 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 			staticID := hex.EncodeToString(staticIDBuf[:10])
 			exportName = "_Cgo_static_" + staticID + "_" + name
 			localName = name + "!" + filepath.Base(path)
-
-			// Create a signature. This is necessary for MacOS to forward the
-			// call, because MacOS doesn't support aliases like ELF and PE do.
-			// (There is N_INDR but __attribute__((alias("..."))) doesn't work).
-			policy := clang_getCursorPrintingPolicy(c)
-			defer C.clang_PrintingPolicy_dispose(policy)
-			C.clang_PrintingPolicy_setProperty(policy, C.CXPrintingPolicy_TerseOutput, 1)
-			stringSignature = getString(clang_getCursorPrettyPrinted(c, policy))
-			stringSignature = strings.Replace(stringSignature, " "+name+"(", " "+exportName+"(", 1)
-			stringSignature = strings.TrimPrefix(stringSignature, "static ")
 		}
 		args := make([]*ast.Field, numArgs)
 		decl := &ast.FuncDecl{
@@ -523,7 +502,7 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 				},
 			}
 		}
-		return decl, stringSignature
+		return decl, nil
 	case C.CXCursor_StructDecl, C.CXCursor_UnionDecl:
 		typ := f.makeASTRecordType(c, pos)
 		typeName := "_Cgo_" + name
