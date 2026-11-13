@@ -86,6 +86,40 @@ import "C"
 	}
 }
 
+func TestCGoIgnoresProcessEnv(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "probe.go"), []byte("package probe\n\nimport \"C\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"CGO_CPPFLAGS", "CGO_CFLAGS", "CGO_CXXFLAGS", "CGO_LDFLAGS"} {
+		t.Setenv(name, "-DLEAKED_"+name)
+	}
+	p := &Package{
+		PackageJSON: PackageJSON{Dir: dir, ImportPath: "probe", CgoFiles: []string{"probe.go"}},
+		FileHashes:  make(map[string][]byte),
+		program: &Program{
+			workingDir: dir,
+			fset:       token.NewFileSet(),
+			config: &compileopts.Config{
+				Options: &compileopts.Options{Opt: "0"},
+				Target: &compileopts.TargetSpec{
+					Triple: "armv6m-unknown-unknown-eabi", GOOS: "linux", GOARCH: "arm",
+				},
+			},
+		},
+	}
+	if _, err := p.parseFiles(); err != nil {
+		t.Fatal(err)
+	}
+	for _, flags := range [][]string{p.CFlags, p.CXXFlags, p.program.LDFlags} {
+		for _, flag := range flags {
+			if strings.HasPrefix(flag, "-DLEAKED_") {
+				t.Errorf("flag %q came from the process environment", flag)
+			}
+		}
+	}
+}
+
 func TestPackageTestContext(t *testing.T) {
 	t.Setenv("GOFLAGS", "")
 	dir := t.TempDir()
