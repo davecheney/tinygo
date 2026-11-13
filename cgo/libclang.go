@@ -246,6 +246,8 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 			stringSignature = getString(C.tinygo_clang_getCursorPrettyPrinted(c, policy))
 			stringSignature = strings.Replace(stringSignature, " "+name+"(", " "+exportName+"(", 1)
 			stringSignature = strings.TrimPrefix(stringSignature, "static ")
+			// An inline definition does not emit a symbol in C99. See #6296.
+			stringSignature = strings.TrimPrefix(stringSignature, "inline ")
 		}
 		args := make([]*ast.Field, numArgs)
 		decl := &ast.FuncDecl{

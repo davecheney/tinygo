@@ -22,6 +22,7 @@ import "C"
 
 // int headerfunc(int a) { return a + 1; }
 // static int headerfunc_static(int a) { return a - 1; }
+// static inline int headerfunc_static_inline(int a) { return a - 2; }
 import "C"
 
 import (
@@ -66,6 +67,7 @@ func main() {
 	// functions in the header C snippet
 	println("headerfunc:", C.headerfunc(5))
 	println("static headerfunc:", C.headerfunc_static(5))
+	println("static inline headerfunc:", C.headerfunc_static_inline(5))
 	headerfunc_2()
 
 	// equivalent types

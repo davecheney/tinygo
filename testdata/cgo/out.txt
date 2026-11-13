@@ -18,6 +18,7 @@ variadic0: 1
 variadic2: 15
 headerfunc: 6
 static headerfunc: 4
+static inline headerfunc: 3
 static headerfunc 2: +4.000000e+000
 static headerfunc void: 3
 bool: true true
