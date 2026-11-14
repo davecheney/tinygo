@@ -87,6 +87,7 @@ func LowerInterrupts(mod llvm.Module) []error {
 			// Replace the callHandlers call with (possibly multiple) calls to
 			// these handlers.
 			builder.SetInsertPointBefore(call)
+			call.InstructionParent().Parent().AddFunctionAttr(ctx.CreateStringAttribute(isrAttr, ""))
 			for _, handler := range handlers {
 				initializer := handler.Initializer()
 				context := builder.CreateExtractValue(initializer, 0, "")

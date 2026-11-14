@@ -115,6 +115,10 @@ func Optimize(mod llvm.Module, config *compileopts.Config) []error {
 		OptimizeStringFromBytes(mod)
 		OptimizeStringEqual(mod)
 
+		if mode := os.Getenv("TINYGO_ISRTAINT"); mode != "" {
+			ReportISRTaint(mod, os.Stderr, mode == "cold")
+		}
+
 	} else {
 		// Must be run at any optimization level.
 		err := LowerInterfaces(mod, config)
