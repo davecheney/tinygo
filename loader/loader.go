@@ -869,20 +869,23 @@ func (p *Package) parseFiles() ([]*ast.File, error) {
 				compileopts.FilePrefixMap(filepath.Join(p.program.goroot, "src"), p.program.config.CSourcePath(".")),
 			)
 		}
+		// The CGO_* environment flags are for the program, not the TinyGo stdlib.
 		var env cgo.Flags
-		for _, v := range []struct {
-			name  string
-			flags *[]string
-		}{
-			{"CGO_CPPFLAGS", &env.CPPFlags},
-			{"CGO_CFLAGS", &env.CFlags},
-			{"CGO_CXXFLAGS", &env.CXXFlags},
-		} {
-			flags, err := goenv.SplitFlags(goenv.Get(v.name))
-			if err != nil {
-				return nil, fmt.Errorf("failed to split %s: %w", v.name, err)
+		if !p.Standard {
+			for _, v := range []struct {
+				name  string
+				flags *[]string
+			}{
+				{"CGO_CPPFLAGS", &env.CPPFlags},
+				{"CGO_CFLAGS", &env.CFlags},
+				{"CGO_CXXFLAGS", &env.CXXFlags},
+			} {
+				flags, err := goenv.SplitFlags(goenv.Get(v.name))
+				if err != nil {
+					return nil, fmt.Errorf("failed to split %s: %w", v.name, err)
+				}
+				*v.flags = flags
 			}
-			*v.flags = flags
 		}
 		// LLVM 15's driver changes the process cwd. Set only FileManager's cwd.
 		// See clang/lib/Driver/Driver.cpp and clang/lib/Basic/FileManager.cpp.

@@ -81,6 +81,47 @@ import "C"
 	}
 }
 
+// The CGO_* environment flags are for the program, not the TinyGo stdlib.
+func TestCGoCompilerFlagsStandard(t *testing.T) {
+	dir := t.TempDir()
+	src := `package probe
+/*
+#if defined(SHARED_ENV) || defined(C_ENV)
+#error environment flags reached a standard package
+#endif
+*/
+import "C"
+`
+	if err := os.WriteFile(filepath.Join(dir, "probe.go"), []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CGO_CPPFLAGS", "-DSHARED_ENV=1")
+	t.Setenv("CGO_CFLAGS", "-DC_ENV=1")
+	t.Setenv("CGO_CXXFLAGS", "-DCXX_ENV=1")
+	p := &Package{
+		PackageJSON: PackageJSON{Dir: dir, ImportPath: "probe", CgoFiles: []string{"probe.go"}, Standard: true},
+		FileHashes:  make(map[string][]byte),
+		program: &Program{
+			workingDir: dir,
+			fset:       token.NewFileSet(),
+			config: &compileopts.Config{
+				Options: &compileopts.Options{Opt: "0"},
+				Target: &compileopts.TargetSpec{
+					Triple: "armv6m-unknown-unknown-eabi", GOOS: "linux", GOARCH: "arm",
+				},
+			},
+		},
+	}
+	if _, err := p.parseFiles(); err != nil {
+		t.Fatal(err)
+	}
+	for _, flag := range slices.Concat(p.CFlags, p.CXXFlags) {
+		if strings.HasSuffix(flag, "_ENV=1") {
+			t.Errorf("standard package got environment flag %q", flag)
+		}
+	}
+}
+
 func TestPackageTestContext(t *testing.T) {
 	t.Setenv("GOFLAGS", "")
 	dir := t.TempDir()
