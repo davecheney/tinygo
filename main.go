@@ -2340,7 +2340,11 @@ func main() {
 		if s, err := goenv.GorootVersionString(); err == nil {
 			goversion = s
 		}
-		fmt.Printf("tinygo version %s %s/%s (using go version %s and LLVM version %s)\n", goenv.Version(), runtime.GOOS, runtime.GOARCH, goversion, llvm.Version)
+		builtWith := ""
+		if runtime.Compiler == "tinygo" {
+			builtWith = ", built with tinygo " + runtime.Version()
+		}
+		fmt.Printf("tinygo version %s %s/%s (using go version %s and LLVM version %s%s)\n", goenv.Version(), runtime.GOOS, runtime.GOARCH, goversion, llvm.Version, builtWith)
 	case "env":
 		if flag.NArg() == 0 {
 			// Show all environment variables.
