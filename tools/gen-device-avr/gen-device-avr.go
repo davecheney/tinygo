@@ -445,11 +445,19 @@ const ({{range .interrupts}}
 //go:linkname callHandlers runtime/interrupt.callHandlers
 func callHandlers(num int)
 
+//go:linkname interruptEnter runtime/interrupt.enter
+func interruptEnter() bool
+
+//go:linkname interruptExit runtime/interrupt.exit
+func interruptExit(prev bool)
+
 {{- range .interrupts}}
 //export __vector_{{.Name}}
 //go:interrupt
 func interrupt{{.Name}}() {
+	prev := interruptEnter()
 	callHandlers(IRQ_{{.Name}})
+	interruptExit(prev)
 }
 {{- end}}
 

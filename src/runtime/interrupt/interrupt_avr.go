@@ -35,11 +35,22 @@ func Restore(state State) {
 	})
 }
 
+// inInterrupt is set by the interrupt vectors in the device package.
+var inInterrupt bool
+
 // In returns whether the system is currently in an interrupt.
-//
-// Warning: this always returns false on AVR, as there does not appear to be a
-// reliable way to determine whether we're currently running inside an interrupt
-// handler.
 func In() bool {
-	return false
+	return inInterrupt
+}
+
+// enter marks the start of an interrupt and returns the previous state.
+func enter() bool {
+	prev := inInterrupt
+	inInterrupt = true
+	return prev
+}
+
+// exit restores the state returned by enter.
+func exit(prev bool) {
+	inInterrupt = prev
 }
