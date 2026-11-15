@@ -514,7 +514,8 @@ func defaultTarget(options *Options) (*TargetSpec, error) {
 			// shared libraries are never resolved.
 			spec.LDFlags = append(spec.LDFlags, "-L"+libDir, "-lc", "-lm", "-lpthread", "--dynamic-linker="+linker)
 		}
-		spec.LDFlags = append(spec.LDFlags, "--gc-sections")
+		// builder.ReadBuildID reads the GNU build ID of a tinygo-built tinygo.
+		spec.LDFlags = append(spec.LDFlags, "--gc-sections", "--build-id")
 		if options.GOARCH == "arm64" {
 			// Disable outline atomics. For details, see:
 			// https://cpufun.substack.com/p/atomics-in-aarch64
