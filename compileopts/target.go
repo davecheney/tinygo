@@ -501,6 +501,10 @@ func defaultTarget(options *Options) (*TargetSpec, error) {
 	case "linux":
 		spec.GC = "boehm"
 		spec.Scheduler = "threads"
+		if options.Scheduler == "" || options.Scheduler == "threads" {
+			// Thread stacks are mapped lazily. 8 MB is the usual glibc default, see pthread_create(3).
+			spec.DefaultStackSize = 8 * 1024 * 1024
+		}
 		spec.Linker = "ld.lld"
 		spec.RTLib = "compiler-rt"
 		spec.Libc = "musl"
