@@ -48,12 +48,14 @@ func NewConfig(options *compileopts.Options) (*compileopts.Config, error) {
 	// compiled with the latest Go version.
 	// This may be a bit too aggressive: if the newer version doesn't change the
 	// Go language we will most likely be able to compile it.
-	buildMajor, buildMinor, _, err := goenv.Parse(runtime.Version())
-	if err != nil {
-		return nil, err
-	}
-	if buildMajor != 1 || buildMinor < gorootMinor {
-		return nil, fmt.Errorf("cannot compile with Go toolchain version go%d.%d (TinyGo was built using toolchain version %s)", gorootMajor, gorootMinor, runtime.Version())
+	if runtime.Compiler != "tinygo" {
+		buildMajor, buildMinor, _, err := goenv.Parse(runtime.Version())
+		if err != nil {
+			return nil, err
+		}
+		if buildMajor != 1 || buildMinor < gorootMinor {
+			return nil, fmt.Errorf("cannot compile with Go toolchain version go%d.%d (TinyGo was built using toolchain version %s)", gorootMajor, gorootMinor, runtime.Version())
+		}
 	}
 
 	config := &compileopts.Config{
