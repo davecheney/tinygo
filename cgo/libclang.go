@@ -45,31 +45,49 @@ typedef struct {
 	uintptr_t data[3];
 } GoCXCursor;
 
-// Forwarding functions. They are implemented in libclang_stubs.c and forward to
-// the real functions without doing anything else, thus they are entirely
-// compatible with the versions without tinygo_ prefix. The only difference is
-// the CXCursor type, which has been replaced with GoCXCursor.
-GoCXCursor tinygo_clang_getTranslationUnitCursor(CXTranslationUnit tu);
-unsigned tinygo_clang_visitChildren(GoCXCursor parent, CXCursorVisitor visitor, CXClientData client_data);
-CXString tinygo_clang_getCursorSpelling(GoCXCursor c);
-CXString tinygo_clang_getCursorPrettyPrinted(GoCXCursor c, CXPrintingPolicy Policy);
-CXPrintingPolicy tinygo_clang_getCursorPrintingPolicy(GoCXCursor c);
-enum CXCursorKind tinygo_clang_getCursorKind(GoCXCursor c);
-CXType tinygo_clang_getCursorType(GoCXCursor c);
-GoCXCursor tinygo_clang_getTypeDeclaration(CXType t);
-CXType tinygo_clang_getTypedefDeclUnderlyingType(GoCXCursor c);
-CXType tinygo_clang_getCursorResultType(GoCXCursor c);
-int tinygo_clang_Cursor_getNumArguments(GoCXCursor c);
-GoCXCursor tinygo_clang_Cursor_getArgument(GoCXCursor c, unsigned i);
-enum CX_StorageClass tinygo_clang_Cursor_getStorageClass(GoCXCursor c);
-CXSourceLocation tinygo_clang_getCursorLocation(GoCXCursor c);
-CXSourceRange tinygo_clang_getCursorExtent(GoCXCursor c);
-CXTranslationUnit tinygo_clang_Cursor_getTranslationUnit(GoCXCursor c);
-long long tinygo_clang_getEnumConstantDeclValue(GoCXCursor c);
-CXType tinygo_clang_getEnumDeclIntegerType(GoCXCursor c);
-unsigned tinygo_clang_Cursor_isAnonymous(GoCXCursor c);
-unsigned tinygo_clang_Cursor_isBitField(GoCXCursor c);
-unsigned tinygo_clang_Cursor_isMacroFunctionLike(GoCXCursor c);
+// Forwarding functions, implemented in libclang_stubs.c. Structs larger than 16
+// bytes are passed through pointers, see https://github.com/tinygo-org/tinygo/issues/4489
+typedef int (*tinygo_clang_visitor)(GoCXCursor *c, GoCXCursor *parent, CXClientData client_data);
+void tinygo_clang_getTranslationUnitCursor(CXTranslationUnit tu, GoCXCursor *result);
+unsigned tinygo_clang_visitChildren(const GoCXCursor *parent, tinygo_clang_visitor visitor, CXClientData client_data);
+CXString tinygo_clang_getCursorSpelling(const GoCXCursor *c);
+CXString tinygo_clang_getCursorPrettyPrinted(const GoCXCursor *c, CXPrintingPolicy policy);
+CXPrintingPolicy tinygo_clang_getCursorPrintingPolicy(const GoCXCursor *c);
+enum CXCursorKind tinygo_clang_getCursorKind(const GoCXCursor *c);
+void tinygo_clang_getCursorType(const GoCXCursor *c, CXType *result);
+void tinygo_clang_getTypeDeclaration(const CXType *t, GoCXCursor *result);
+void tinygo_clang_getTypedefDeclUnderlyingType(const GoCXCursor *c, CXType *result);
+void tinygo_clang_getCursorResultType(const GoCXCursor *c, CXType *result);
+int tinygo_clang_Cursor_getNumArguments(const GoCXCursor *c);
+void tinygo_clang_Cursor_getArgument(const GoCXCursor *c, unsigned i, GoCXCursor *result);
+enum CX_StorageClass tinygo_clang_Cursor_getStorageClass(const GoCXCursor *c);
+void tinygo_clang_getCursorLocation(const GoCXCursor *c, CXSourceLocation *result);
+void tinygo_clang_getCursorExtent(const GoCXCursor *c, CXSourceRange *result);
+CXTranslationUnit tinygo_clang_Cursor_getTranslationUnit(const GoCXCursor *c);
+long long tinygo_clang_getEnumConstantDeclValue(const GoCXCursor *c);
+void tinygo_clang_getEnumDeclIntegerType(const GoCXCursor *c, CXType *result);
+unsigned tinygo_clang_Cursor_isAnonymous(const GoCXCursor *c);
+unsigned tinygo_clang_Cursor_isBitField(const GoCXCursor *c);
+unsigned tinygo_clang_Cursor_isMacroFunctionLike(const GoCXCursor *c);
+void tinygo_clang_getDiagnosticLocation(CXDiagnostic diagnostic, CXSourceLocation *result);
+void tinygo_clang_tokenize(CXTranslationUnit tu, const CXSourceRange *range, CXToken **tokens, unsigned *numTokens);
+CXString tinygo_clang_getTokenSpelling(CXTranslationUnit tu, const CXToken *token);
+void tinygo_clang_getTokenLocation(CXTranslationUnit tu, const CXToken *token, CXSourceLocation *result);
+void tinygo_clang_getExpansionLocation(const CXSourceLocation *location, CXFile *file, unsigned *line, unsigned *column, unsigned *offset);
+void tinygo_clang_getFileLocation(const CXSourceLocation *location, CXFile *file, unsigned *line, unsigned *column, unsigned *offset);
+void tinygo_clang_getPresumedLocation(const CXSourceLocation *location, CXString *filename, unsigned *line, unsigned *column);
+unsigned tinygo_clang_isFunctionTypeVariadic(const CXType *t);
+void tinygo_clang_getArgType(const CXType *t, unsigned i, CXType *result);
+CXString tinygo_clang_getTypedefName(const CXType *t);
+CXString tinygo_clang_getTypeSpelling(const CXType *t);
+void tinygo_clang_Type_getNamedType(const CXType *t, CXType *result);
+void tinygo_clang_getCanonicalType(const CXType *t, CXType *result);
+void tinygo_clang_getPointeeType(const CXType *t, CXType *result);
+void tinygo_clang_getElementType(const CXType *t, CXType *result);
+long long tinygo_clang_getArraySize(const CXType *t);
+long long tinygo_clang_Type_getSizeOf(const CXType *t);
+long long tinygo_clang_Type_getAlignOf(const CXType *t);
+long long tinygo_clang_Type_getOffsetOf(const CXType *t, const char *s);
 
 // Fix some warnings on Windows ARM. Without the __declspec(dllexport), it gives warnings like this:
 //     In file included from _cgo_export.c:4:
@@ -83,9 +101,9 @@ unsigned tinygo_clang_Cursor_isMacroFunctionLike(GoCXCursor c);
 #endif
 
 CGO_DECL
-int tinygo_clang_globals_visitor(GoCXCursor c, GoCXCursor parent, CXClientData client_data);
+int tinygo_clang_globals_visitor(GoCXCursor *c, GoCXCursor *parent, CXClientData client_data);
 CGO_DECL
-int tinygo_clang_struct_visitor(GoCXCursor c, GoCXCursor parent, CXClientData client_data);
+int tinygo_clang_struct_visitor(GoCXCursor *c, GoCXCursor *parent, CXClientData client_data);
 CGO_DECL
 void tinygo_clang_inclusion_visitor(CXFile included_file, CXSourceLocation *inclusion_stack, unsigned include_len, CXClientData client_data);
 */
@@ -105,6 +123,200 @@ var diagnosticSeverity = [...]string{
 // Alias so that cgo.go (which doesn't import Clang related stuff and is in
 // theory decoupled from Clang) can also use this type.
 type clangCursor = C.GoCXCursor
+
+// The functions below wrap libclang calls that pass or return structs larger
+// than 16 bytes, see https://github.com/tinygo-org/tinygo/issues/4489
+func clang_getTranslationUnitCursor(tu C.CXTranslationUnit) C.GoCXCursor {
+	var result C.GoCXCursor
+	C.tinygo_clang_getTranslationUnitCursor(tu, &result)
+	return result
+}
+
+func clang_visitChildren(parent C.GoCXCursor, visitor C.tinygo_clang_visitor, clientData C.CXClientData) C.unsigned {
+	return C.tinygo_clang_visitChildren(&parent, visitor, clientData)
+}
+
+func clang_getCursorSpelling(c C.GoCXCursor) C.CXString {
+	return C.tinygo_clang_getCursorSpelling(&c)
+}
+
+func clang_getCursorPrettyPrinted(c C.GoCXCursor, policy C.CXPrintingPolicy) C.CXString {
+	return C.tinygo_clang_getCursorPrettyPrinted(&c, policy)
+}
+
+func clang_getCursorPrintingPolicy(c C.GoCXCursor) C.CXPrintingPolicy {
+	return C.tinygo_clang_getCursorPrintingPolicy(&c)
+}
+
+func clang_getCursorKind(c C.GoCXCursor) C.enum_CXCursorKind {
+	return C.tinygo_clang_getCursorKind(&c)
+}
+
+func clang_getCursorType(c C.GoCXCursor) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getCursorType(&c, &result)
+	return result
+}
+
+func clang_getTypeDeclaration(t C.CXType) C.GoCXCursor {
+	var result C.GoCXCursor
+	C.tinygo_clang_getTypeDeclaration(&t, &result)
+	return result
+}
+
+func clang_getTypedefDeclUnderlyingType(c C.GoCXCursor) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getTypedefDeclUnderlyingType(&c, &result)
+	return result
+}
+
+func clang_getCursorResultType(c C.GoCXCursor) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getCursorResultType(&c, &result)
+	return result
+}
+
+func clang_Cursor_getNumArguments(c C.GoCXCursor) C.int {
+	return C.tinygo_clang_Cursor_getNumArguments(&c)
+}
+
+func clang_Cursor_getArgument(c C.GoCXCursor, i C.uint) C.GoCXCursor {
+	var result C.GoCXCursor
+	C.tinygo_clang_Cursor_getArgument(&c, i, &result)
+	return result
+}
+
+func clang_Cursor_getStorageClass(c C.GoCXCursor) C.enum_CX_StorageClass {
+	return C.tinygo_clang_Cursor_getStorageClass(&c)
+}
+
+func clang_getCursorLocation(c C.GoCXCursor) C.CXSourceLocation {
+	var result C.CXSourceLocation
+	C.tinygo_clang_getCursorLocation(&c, &result)
+	return result
+}
+
+func clang_getCursorExtent(c C.GoCXCursor) C.CXSourceRange {
+	var result C.CXSourceRange
+	C.tinygo_clang_getCursorExtent(&c, &result)
+	return result
+}
+
+func clang_Cursor_getTranslationUnit(c C.GoCXCursor) C.CXTranslationUnit {
+	return C.tinygo_clang_Cursor_getTranslationUnit(&c)
+}
+
+func clang_getEnumConstantDeclValue(c C.GoCXCursor) C.longlong {
+	return C.tinygo_clang_getEnumConstantDeclValue(&c)
+}
+
+func clang_getEnumDeclIntegerType(c C.GoCXCursor) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getEnumDeclIntegerType(&c, &result)
+	return result
+}
+
+func clang_Cursor_isAnonymous(c C.GoCXCursor) C.unsigned {
+	return C.tinygo_clang_Cursor_isAnonymous(&c)
+}
+
+func clang_Cursor_isBitField(c C.GoCXCursor) C.unsigned {
+	return C.tinygo_clang_Cursor_isBitField(&c)
+}
+
+func clang_Cursor_isMacroFunctionLike(c C.GoCXCursor) C.unsigned {
+	return C.tinygo_clang_Cursor_isMacroFunctionLike(&c)
+}
+
+func clang_getDiagnosticLocation(diagnostic C.CXDiagnostic) C.CXSourceLocation {
+	var result C.CXSourceLocation
+	C.tinygo_clang_getDiagnosticLocation(diagnostic, &result)
+	return result
+}
+
+func clang_tokenize(tu C.CXTranslationUnit, sourceRange C.CXSourceRange, tokens **C.CXToken, numTokens *C.unsigned) {
+	C.tinygo_clang_tokenize(tu, &sourceRange, tokens, numTokens)
+}
+
+func clang_getTokenSpelling(tu C.CXTranslationUnit, token C.CXToken) C.CXString {
+	return C.tinygo_clang_getTokenSpelling(tu, &token)
+}
+
+func clang_getTokenLocation(tu C.CXTranslationUnit, token C.CXToken) C.CXSourceLocation {
+	var result C.CXSourceLocation
+	C.tinygo_clang_getTokenLocation(tu, &token, &result)
+	return result
+}
+
+func clang_getExpansionLocation(location C.CXSourceLocation, file *C.CXFile, line, column, offset *C.unsigned) {
+	C.tinygo_clang_getExpansionLocation(&location, file, line, column, offset)
+}
+
+func clang_getFileLocation(location C.CXSourceLocation, file *C.CXFile, line, column, offset *C.unsigned) {
+	C.tinygo_clang_getFileLocation(&location, file, line, column, offset)
+}
+
+func clang_getPresumedLocation(location C.CXSourceLocation, filename *C.CXString, line, column *C.unsigned) {
+	C.tinygo_clang_getPresumedLocation(&location, filename, line, column)
+}
+
+func clang_isFunctionTypeVariadic(t C.CXType) C.unsigned {
+	return C.tinygo_clang_isFunctionTypeVariadic(&t)
+}
+
+func clang_getArgType(t C.CXType, i C.uint) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getArgType(&t, i, &result)
+	return result
+}
+
+func clang_getTypedefName(t C.CXType) C.CXString {
+	return C.tinygo_clang_getTypedefName(&t)
+}
+
+func clang_getTypeSpelling(t C.CXType) C.CXString {
+	return C.tinygo_clang_getTypeSpelling(&t)
+}
+
+func clang_Type_getNamedType(t C.CXType) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_Type_getNamedType(&t, &result)
+	return result
+}
+
+func clang_getCanonicalType(t C.CXType) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getCanonicalType(&t, &result)
+	return result
+}
+
+func clang_getPointeeType(t C.CXType) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getPointeeType(&t, &result)
+	return result
+}
+
+func clang_getElementType(t C.CXType) C.CXType {
+	var result C.CXType
+	C.tinygo_clang_getElementType(&t, &result)
+	return result
+}
+
+func clang_getArraySize(t C.CXType) C.longlong {
+	return C.tinygo_clang_getArraySize(&t)
+}
+
+func clang_Type_getSizeOf(t C.CXType) C.longlong {
+	return C.tinygo_clang_Type_getSizeOf(&t)
+}
+
+func clang_Type_getAlignOf(t C.CXType) C.longlong {
+	return C.tinygo_clang_Type_getAlignOf(&t)
+}
+
+func clang_Type_getOffsetOf(t C.CXType, s *C.char) C.longlong {
+	return C.tinygo_clang_Type_getOffsetOf(&t, s)
+}
 
 func init() {
 	// Check that we haven't messed up LLVM versioning.
@@ -162,7 +374,7 @@ func (f *cgoFile) readNames(fragment string, cflags []string, filename string, c
 		addDiagnostic := func(diagnostic C.CXDiagnostic) {
 			spelling := getString(C.clang_getDiagnosticSpelling(diagnostic))
 			severity := diagnosticSeverity[C.clang_getDiagnosticSeverity(diagnostic)]
-			location := C.clang_getDiagnosticLocation(diagnostic)
+			location := clang_getDiagnosticLocation(diagnostic)
 			pos := f.getClangLocationPosition(location, unit)
 			f.addError(pos, severity+": "+spelling)
 		}
@@ -181,8 +393,8 @@ func (f *cgoFile) readNames(fragment string, cflags []string, filename string, c
 	// Extract information required by CGo.
 	ref := storedRefs.Put(f)
 	defer storedRefs.Remove(ref)
-	cursor := C.tinygo_clang_getTranslationUnitCursor(unit)
-	C.tinygo_clang_visitChildren(cursor, C.CXCursorVisitor(C.tinygo_clang_globals_visitor), C.CXClientData(ref))
+	cursor := clang_getTranslationUnitCursor(unit)
+	clang_visitChildren(cursor, C.tinygo_clang_visitor(C.tinygo_clang_globals_visitor), C.CXClientData(ref))
 
 	// Determine files read during CGo processing, for caching.
 	inclusionCallback := func(includedFile C.CXFile) {
@@ -217,16 +429,16 @@ func (f *cgoFile) readNames(fragment string, cflags []string, filename string, c
 // Convert the AST node under the given Clang cursor to a Go AST node and return
 // it.
 func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
-	kind := C.tinygo_clang_getCursorKind(c)
+	kind := clang_getCursorKind(c)
 	pos := f.getCursorPosition(c)
 	switch kind {
 	case C.CXCursor_FunctionDecl:
-		cursorType := C.tinygo_clang_getCursorType(c)
-		numArgs := int(C.tinygo_clang_Cursor_getNumArguments(c))
+		cursorType := clang_getCursorType(c)
+		numArgs := int(clang_Cursor_getNumArguments(c))
 		exportName := name
 		localName := name
 		var stringSignature string
-		if C.tinygo_clang_Cursor_getStorageClass(c) == C.CX_SC_Static {
+		if clang_Cursor_getStorageClass(c) == C.CX_SC_Static {
 			// A static function is assigned a globally unique symbol name based
 			// on the file path (like _Cgo_static_2d09198adbf58f4f4655_foo) and
 			// has a different Go name in the form of C.foo!symbols.go instead
@@ -240,10 +452,10 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 			// Create a signature. This is necessary for MacOS to forward the
 			// call, because MacOS doesn't support aliases like ELF and PE do.
 			// (There is N_INDR but __attribute__((alias("..."))) doesn't work).
-			policy := C.tinygo_clang_getCursorPrintingPolicy(c)
+			policy := clang_getCursorPrintingPolicy(c)
 			defer C.clang_PrintingPolicy_dispose(policy)
 			C.clang_PrintingPolicy_setProperty(policy, C.CXPrintingPolicy_TerseOutput, 1)
-			stringSignature = getString(C.tinygo_clang_getCursorPrettyPrinted(c, policy))
+			stringSignature = getString(clang_getCursorPrettyPrinted(c, policy))
 			stringSignature = strings.Replace(stringSignature, " "+name+"(", " "+exportName+"(", 1)
 			stringSignature = strings.TrimPrefix(stringSignature, "static ")
 		}
@@ -271,7 +483,7 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 			},
 		}
 		var doc []string
-		if C.clang_isFunctionTypeVariadic(cursorType) != 0 {
+		if clang_isFunctionTypeVariadic(cursorType) != 0 {
 			doc = append(doc, "//go:variadic")
 		}
 		if _, ok := f.noescapingFuncs[name]; ok {
@@ -285,9 +497,9 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 			})
 		}
 		for i := range numArgs {
-			arg := C.tinygo_clang_Cursor_getArgument(c, C.uint(i))
-			argName := getString(C.tinygo_clang_getCursorSpelling(arg))
-			argType := C.clang_getArgType(cursorType, C.uint(i))
+			arg := clang_Cursor_getArgument(c, C.uint(i))
+			argName := getString(clang_getCursorSpelling(arg))
+			argType := clang_getArgType(cursorType, C.uint(i))
 			if argName == "" {
 				argName = "$" + strconv.Itoa(i)
 			}
@@ -301,7 +513,7 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 				Type: f.makeDecayingASTType(argType, pos),
 			}
 		}
-		resultType := C.tinygo_clang_getCursorResultType(c)
+		resultType := clang_getCursorResultType(c)
 		if resultType.kind != C.CXType_Void {
 			decl.Type.Results = &ast.FieldList{
 				List: []*ast.Field{
@@ -330,7 +542,7 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 		return typeSpec, typ
 	case C.CXCursor_TypedefDecl:
 		typeName := "_Cgo_" + name
-		underlyingType := C.tinygo_clang_getTypedefDeclUnderlyingType(c)
+		underlyingType := clang_getTypedefDeclUnderlyingType(c)
 		typeSpec := &ast.TypeSpec{
 			Name: &ast.Ident{
 				NamePos: pos,
@@ -341,7 +553,7 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 		}
 		return typeSpec, nil
 	case C.CXCursor_VarDecl:
-		cursorType := C.tinygo_clang_getCursorType(c)
+		cursorType := clang_getCursorType(c)
 		typeExpr := f.makeASTType(cursorType, pos)
 		gen := &ast.GenDecl{
 			TokPos: pos,
@@ -390,7 +602,7 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 		gen.Specs = append(gen.Specs, valueSpec)
 		return gen, nil
 	case C.CXCursor_EnumDecl:
-		underlying := C.tinygo_clang_getEnumDeclIntegerType(c)
+		underlying := clang_getEnumDeclIntegerType(c)
 		// TODO: gc's CGo implementation uses types such as `uint32` for enums
 		// instead of types such as C.int, which are used here.
 		typeSpec := &ast.TypeSpec{
@@ -403,7 +615,7 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 		}
 		return typeSpec, nil
 	case C.CXCursor_EnumConstantDecl:
-		value := C.tinygo_clang_getEnumConstantDeclValue(c)
+		value := clang_getEnumConstantDeclValue(c)
 		expr := &ast.BasicLit{
 			ValuePos: pos,
 			Kind:     token.INT,
@@ -434,10 +646,10 @@ func (f *cgoFile) createASTNode(name string, c clangCursor) (ast.Node, any) {
 //
 //	#define add(a, b) (a+b)
 func (f *cgoFile) isFunctionLikeMacro(c clangCursor) bool {
-	if C.tinygo_clang_getCursorKind(c) != C.CXCursor_MacroDefinition {
+	if clang_getCursorKind(c) != C.CXCursor_MacroDefinition {
 		return false
 	}
-	return C.tinygo_clang_Cursor_isMacroFunctionLike(c) != 0
+	return clang_Cursor_isMacroFunctionLike(c) != 0
 }
 
 // Get the macro value: the position in the source file and the string value of
@@ -445,11 +657,11 @@ func (f *cgoFile) isFunctionLikeMacro(c clangCursor) bool {
 func (f *cgoFile) getMacro(c clangCursor) (pos token.Pos, value string) {
 	// Extract tokens from the Clang tokenizer.
 	// See: https://stackoverflow.com/a/19074846/559350
-	sourceRange := C.tinygo_clang_getCursorExtent(c)
-	tu := C.tinygo_clang_Cursor_getTranslationUnit(c)
+	sourceRange := clang_getCursorExtent(c)
+	tu := clang_Cursor_getTranslationUnit(c)
 	var rawTokens *C.CXToken
 	var numTokens C.unsigned
-	C.clang_tokenize(tu, sourceRange, &rawTokens, &numTokens)
+	clang_tokenize(tu, sourceRange, &rawTokens, &numTokens)
 	tokens := unsafe.Slice(rawTokens, numTokens)
 	defer C.clang_disposeTokens(tu, rawTokens, numTokens)
 
@@ -458,10 +670,10 @@ func (f *cgoFile) getMacro(c clangCursor) (pos token.Pos, value string) {
 	sourceBuf := &bytes.Buffer{}
 	var startOffset int
 	for i, token := range tokens {
-		spelling := getString(C.clang_getTokenSpelling(tu, token))
-		location := C.clang_getTokenLocation(tu, token)
+		spelling := getString(clang_getTokenSpelling(tu, token))
+		location := clang_getTokenLocation(tu, token)
 		var tokenOffset C.unsigned
-		C.clang_getExpansionLocation(location, nil, nil, nil, &tokenOffset)
+		clang_getExpansionLocation(location, nil, nil, nil, &tokenOffset)
 		if i == 0 {
 			// The first token is the macro name itself.
 			// Skip it (after using its location).
@@ -494,34 +706,35 @@ func getString(clangString C.CXString) (s string) {
 }
 
 //export tinygo_clang_globals_visitor
-func tinygo_clang_globals_visitor(c, parent C.GoCXCursor, client_data C.CXClientData) C.int {
+func tinygo_clang_globals_visitor(cp, parentp *C.GoCXCursor, client_data C.CXClientData) C.int {
+	c := *cp
 	f := storedRefs.Get(unsafe.Pointer(client_data)).(*cgoFile)
-	switch C.tinygo_clang_getCursorKind(c) {
+	switch clang_getCursorKind(c) {
 	case C.CXCursor_FunctionDecl:
-		name := getString(C.tinygo_clang_getCursorSpelling(c))
+		name := getString(clang_getCursorSpelling(c))
 		f.names[name] = c
 	case C.CXCursor_StructDecl:
-		name := getString(C.tinygo_clang_getCursorSpelling(c))
+		name := getString(clang_getCursorSpelling(c))
 		if name != "" {
 			f.names["struct_"+name] = c
 		}
 	case C.CXCursor_UnionDecl:
-		name := getString(C.tinygo_clang_getCursorSpelling(c))
+		name := getString(clang_getCursorSpelling(c))
 		if name != "" {
 			f.names["union_"+name] = c
 		}
 	case C.CXCursor_TypedefDecl:
-		typedefType := C.tinygo_clang_getCursorType(c)
-		name := getString(C.clang_getTypedefName(typedefType))
+		typedefType := clang_getCursorType(c)
+		name := getString(clang_getTypedefName(typedefType))
 		f.names[name] = c
 	case C.CXCursor_VarDecl:
-		name := getString(C.tinygo_clang_getCursorSpelling(c))
+		name := getString(clang_getCursorSpelling(c))
 		f.names[name] = c
 	case C.CXCursor_MacroDefinition:
-		name := getString(C.tinygo_clang_getCursorSpelling(c))
+		name := getString(clang_getCursorSpelling(c))
 		f.names[name] = c
 	case C.CXCursor_EnumDecl:
-		name := getString(C.tinygo_clang_getCursorSpelling(c))
+		name := getString(clang_getCursorSpelling(c))
 		if name != "" {
 			// Named enum, which can be referenced from Go using C.enum_foo.
 			f.names["enum_"+name] = c
@@ -530,7 +743,7 @@ func tinygo_clang_globals_visitor(c, parent C.GoCXCursor, client_data C.CXClient
 		return C.CXChildVisit_Recurse
 	case C.CXCursor_EnumConstantDecl:
 		// We arrive here because of the "Recurse" above.
-		name := getString(C.tinygo_clang_getCursorSpelling(c))
+		name := getString(clang_getCursorSpelling(c))
 		f.names[name] = c
 	}
 	return C.CXChildVisit_Continue
@@ -539,11 +752,11 @@ func tinygo_clang_globals_visitor(c, parent C.GoCXCursor, client_data C.CXClient
 // Get the precise location in the source code. Used for uniquely identifying
 // source locations.
 func (f *cgoFile) getUniqueLocationID(pos token.Pos, cursor C.GoCXCursor) any {
-	clangLocation := C.tinygo_clang_getCursorLocation(cursor)
+	clangLocation := clang_getCursorLocation(cursor)
 	var file C.CXFile
 	var line C.unsigned
 	var column C.unsigned
-	C.clang_getFileLocation(clangLocation, &file, &line, &column, nil)
+	clang_getFileLocation(clangLocation, &file, &line, &column, nil)
 	location := token.Position{
 		Filename: getString(C.clang_getFileName(file)),
 		Line:     int(line),
@@ -558,7 +771,7 @@ func (f *cgoFile) getUniqueLocationID(pos token.Pos, cursor C.GoCXCursor) any {
 
 // getCursorPosition returns a usable token.Pos from a libclang cursor.
 func (p *cgoPackage) getCursorPosition(cursor C.GoCXCursor) token.Pos {
-	return p.getClangLocationPosition(C.tinygo_clang_getCursorLocation(cursor), C.tinygo_clang_Cursor_getTranslationUnit(cursor))
+	return p.getClangLocationPosition(clang_getCursorLocation(cursor), clang_Cursor_getTranslationUnit(cursor))
 }
 
 // getClangLocationPosition returns a usable token.Pos based on a libclang
@@ -570,7 +783,7 @@ func (p *cgoPackage) getClangLocationPosition(location C.CXSourceLocation, tu C.
 	var line C.unsigned
 	var column C.unsigned
 	var offset C.unsigned
-	C.clang_getExpansionLocation(location, &file, &line, &column, &offset)
+	clang_getExpansionLocation(location, &file, &line, &column, &offset)
 	if line == 0 || file == nil {
 		// Invalid token.
 		return token.NoPos
@@ -606,7 +819,7 @@ func (p *cgoPackage) getClangLocationPosition(location C.CXSourceLocation, tu C.
 	var filename2String C.CXString
 	var line2 C.unsigned
 	var column2 C.unsigned
-	C.clang_getPresumedLocation(location, &filename2String, &line2, &column2)
+	clang_getPresumedLocation(location, &filename2String, &line2, &column2)
 	filename2 := getString(filename2String)
 	if filename2 != filename || line2 != line || column2 != column {
 		// The location was changed with a preprocessor directive.
@@ -666,11 +879,11 @@ func (f *cgoFile) makeDecayingASTType(typ C.CXType, pos token.Pos) ast.Expr {
 		// https://clang.llvm.org/doxygen/classclang_1_1ElaboratedType.html#details
 		// > The type itself is always "sugar", used to express what was written
 		// > in the source code but containing no additional semantic information.
-		underlyingType = C.clang_Type_getNamedType(underlyingType)
+		underlyingType = clang_Type_getNamedType(underlyingType)
 	}
 	if underlyingType.kind == C.CXType_Typedef {
-		c := C.tinygo_clang_getTypeDeclaration(underlyingType)
-		underlyingType = C.tinygo_clang_getTypedefDeclUnderlyingType(c)
+		c := clang_getTypeDeclaration(underlyingType)
+		underlyingType = clang_getTypedefDeclUnderlyingType(c)
 		// TODO: support a chain of typedefs. At the moment, it seems to get
 		// stuck in an endless loop when trying to get to the most underlying
 		// type.
@@ -688,7 +901,7 @@ func (f *cgoFile) makeDecayingASTType(typ C.CXType, pos token.Pos) ast.Expr {
 	// TODO: there are more kinds of decaying types.
 	if underlyingType.kind == C.CXType_ConstantArray || underlyingType.kind == C.CXType_IncompleteArray {
 		// Apply type decaying.
-		pointeeType := C.clang_getElementType(underlyingType)
+		pointeeType := clang_getElementType(underlyingType)
 		return &ast.StarExpr{
 			Star: pos,
 			X:    f.makeASTType(pointeeType, pos),
@@ -701,7 +914,7 @@ func (f *cgoFile) makeDecayingASTType(typ C.CXType, pos token.Pos) ast.Expr {
 // it converts a libclang type to a type in the Go AST.
 func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 	if typ.kind == C.CXType_Unexposed || typ.kind == C.tinygo_CXType_PredefinedSugar {
-		canonical := C.clang_getCanonicalType(typ)
+		canonical := clang_getCanonicalType(typ)
 		if canonical.kind != C.CXType_Invalid && canonical.kind != C.CXType_Unexposed && canonical.kind != C.tinygo_CXType_PredefinedSugar {
 			return f.makeASTType(canonical, pos)
 		}
@@ -733,7 +946,7 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 	case C.CXType_Bool:
 		typeName = "bool"
 	case C.CXType_Float, C.CXType_Double, C.CXType_LongDouble:
-		switch C.clang_Type_getSizeOf(typ) {
+		switch clang_Type_getSizeOf(typ) {
 		case 4:
 			typeName = "float32"
 		case 8:
@@ -743,14 +956,14 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 			// sensible error message like "undeclared name: C.long double".
 		}
 	case C.CXType_Complex:
-		switch C.clang_Type_getSizeOf(typ) {
+		switch clang_Type_getSizeOf(typ) {
 		case 8:
 			typeName = "complex64"
 		case 16:
 			typeName = "complex128"
 		}
 	case C.CXType_Pointer:
-		pointeeType := C.clang_getPointeeType(typ)
+		pointeeType := clang_getPointeeType(typ)
 		if pointeeType.kind == C.CXType_Void {
 			// void* type is translated to Go as unsafe.Pointer
 			return &ast.SelectorExpr{
@@ -774,9 +987,9 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 			Len: &ast.BasicLit{
 				ValuePos: pos,
 				Kind:     token.INT,
-				Value:    strconv.FormatInt(int64(C.clang_getArraySize(typ)), 10),
+				Value:    strconv.FormatInt(int64(clang_getArraySize(typ)), 10),
 			},
-			Elt: f.makeASTType(C.clang_getElementType(typ), pos),
+			Elt: f.makeASTType(clang_getElementType(typ), pos),
 		}
 	case C.CXType_FunctionProto:
 		// Be compatible with gc, which uses the *[0]byte type for function
@@ -796,14 +1009,14 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 			},
 		}
 	case C.CXType_Typedef:
-		name := getString(C.clang_getTypedefName(typ))
-		c := C.tinygo_clang_getTypeDeclaration(typ)
+		name := getString(clang_getTypedefName(typ))
+		c := clang_getTypeDeclaration(typ)
 		return &ast.Ident{
 			NamePos: pos,
 			Name:    f.getASTDeclName(name, c, false),
 		}
 	case C.CXType_Elaborated:
-		underlying := C.clang_Type_getNamedType(typ)
+		underlying := clang_Type_getNamedType(typ)
 		switch underlying.kind {
 		case C.CXType_Record:
 			return f.makeASTType(underlying, pos)
@@ -817,10 +1030,10 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 			typeName = "<unknown>"
 		}
 	case C.CXType_Record:
-		cursor := C.tinygo_clang_getTypeDeclaration(typ)
-		name := getString(C.tinygo_clang_getCursorSpelling(cursor))
+		cursor := clang_getTypeDeclaration(typ)
+		name := getString(clang_getCursorSpelling(cursor))
 		var cgoRecordPrefix string
-		switch C.tinygo_clang_getCursorKind(cursor) {
+		switch clang_getCursorKind(cursor) {
 		case C.CXCursor_StructDecl:
 			cgoRecordPrefix = "struct_"
 		case C.CXCursor_UnionDecl:
@@ -829,7 +1042,7 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 			// makeASTRecordType will create an appropriate error.
 			cgoRecordPrefix = "record_"
 		}
-		if name == "" || C.tinygo_clang_Cursor_isAnonymous(cursor) != 0 {
+		if name == "" || clang_Cursor_isAnonymous(cursor) != 0 {
 			// Anonymous record, probably inside a typedef.
 			location := f.getUniqueLocationID(pos, cursor)
 			name = f.getUnnamedDeclName("_Ctype_"+cgoRecordPrefix+"__", location)
@@ -841,8 +1054,8 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 			Name:    f.getASTDeclName(name, cursor, false),
 		}
 	case C.CXType_Enum:
-		cursor := C.tinygo_clang_getTypeDeclaration(typ)
-		name := getString(C.tinygo_clang_getCursorSpelling(cursor))
+		cursor := clang_getTypeDeclaration(typ)
+		name := getString(clang_getCursorSpelling(cursor))
 		if name == "" {
 			// Anonymous enum, probably inside a typedef.
 			location := f.getUniqueLocationID(pos, cursor)
@@ -857,7 +1070,7 @@ func (f *cgoFile) makeASTType(typ C.CXType, pos token.Pos) ast.Expr {
 	}
 	if typeName == "" {
 		// Report this as an error.
-		typeSpelling := getString(C.clang_getTypeSpelling(typ))
+		typeSpelling := getString(clang_getTypeSpelling(typ))
 		typeKindSpelling := getString(C.clang_getTypeKindSpelling(typ.kind))
 		f.addError(pos, fmt.Sprintf("unknown C type: %v (libclang type kind %s)", typeSpelling, typeKindSpelling))
 		typeName = "_Cgo_<unknown>"
@@ -873,9 +1086,9 @@ func (p *cgoPackage) getIntegerType(name string, cursor clangCursor) *ast.TypeSp
 	pos := p.getCursorPosition(cursor)
 
 	// Find a Go type that matches the size and signedness of the given C type.
-	underlyingType := C.tinygo_clang_getTypedefDeclUnderlyingType(cursor)
+	underlyingType := clang_getTypedefDeclUnderlyingType(cursor)
 	var goName string
-	typeSize := C.clang_Type_getSizeOf(underlyingType)
+	typeSize := clang_Type_getSizeOf(underlyingType)
 	switch name {
 	case "_Cgo_char":
 		if typeSize != 1 {
@@ -951,9 +1164,9 @@ func (f *cgoFile) makeASTRecordType(cursor C.GoCXCursor, pos token.Pos) *elabora
 		bitfieldList *[]bitfieldInfo
 	}{fieldList, f, &inBitfield, &bitfieldNum, &bitfieldList})
 	defer storedRefs.Remove(ref)
-	C.tinygo_clang_visitChildren(cursor, C.CXCursorVisitor(C.tinygo_clang_struct_visitor), C.CXClientData(ref))
+	clang_visitChildren(cursor, C.tinygo_clang_visitor(C.tinygo_clang_struct_visitor), C.CXClientData(ref))
 	renameFieldKeywords(fieldList)
-	switch C.tinygo_clang_getCursorKind(cursor) {
+	switch clang_getCursorKind(cursor) {
 	case C.CXCursor_StructDecl:
 		return &elaboratedTypeInfo{
 			typeExpr: &ast.StructType{
@@ -980,9 +1193,9 @@ func (f *cgoFile) makeASTRecordType(cursor C.GoCXCursor, pos token.Pos) *elabora
 			// This is valid C... but please don't do this.
 			f.addError(pos, "bitfield in a union is not supported")
 		}
-		typ := C.tinygo_clang_getCursorType(cursor)
-		alignInBytes := int64(C.clang_Type_getAlignOf(typ))
-		sizeInBytes := int64(C.clang_Type_getSizeOf(typ))
+		typ := clang_getCursorType(cursor)
+		alignInBytes := int64(clang_Type_getAlignOf(typ))
+		sizeInBytes := int64(clang_Type_getSizeOf(typ))
 		if sizeInBytes == 0 {
 			f.addError(pos, "zero-length union is not supported")
 		}
@@ -990,7 +1203,7 @@ func (f *cgoFile) makeASTRecordType(cursor C.GoCXCursor, pos token.Pos) *elabora
 		typeInfo.unionAlign = alignInBytes
 		return typeInfo
 	default:
-		cursorKind := C.tinygo_clang_getCursorKind(cursor)
+		cursorKind := clang_getCursorKind(cursor)
 		cursorKindSpelling := getString(C.clang_getCursorKindSpelling(cursorKind))
 		f.addError(pos, fmt.Sprintf("expected StructDecl or UnionDecl, not %s", cursorKindSpelling))
 		return &elaboratedTypeInfo{
@@ -1003,7 +1216,8 @@ func (f *cgoFile) makeASTRecordType(cursor C.GoCXCursor, pos token.Pos) *elabora
 }
 
 //export tinygo_clang_struct_visitor
-func tinygo_clang_struct_visitor(c, parent C.GoCXCursor, client_data C.CXClientData) C.int {
+func tinygo_clang_struct_visitor(cp, parentp *C.GoCXCursor, client_data C.CXClientData) C.int {
+	c, parent := *cp, *parentp
 	passed := storedRefs.Get(unsafe.Pointer(client_data)).(struct {
 		fieldList    *ast.FieldList
 		file         *cgoFile
@@ -1017,7 +1231,7 @@ func tinygo_clang_struct_visitor(c, parent C.GoCXCursor, client_data C.CXClientD
 	bitfieldNum := passed.bitfieldNum
 	bitfieldList := passed.bitfieldList
 	pos := f.getCursorPosition(c)
-	switch cursorKind := C.tinygo_clang_getCursorKind(c); cursorKind {
+	switch cursorKind := clang_getCursorKind(c); cursorKind {
 	case C.CXCursor_FieldDecl:
 		// Expected. This is a regular field.
 	case C.CXCursor_StructDecl, C.CXCursor_UnionDecl:
@@ -1028,21 +1242,21 @@ func tinygo_clang_struct_visitor(c, parent C.GoCXCursor, client_data C.CXClientD
 		f.addError(pos, fmt.Sprintf("expected FieldDecl in struct or union, not %s", cursorKindSpelling))
 		return C.CXChildVisit_Continue
 	}
-	name := getString(C.tinygo_clang_getCursorSpelling(c))
+	name := getString(clang_getCursorSpelling(c))
 	if name == "" {
 		// Assume this is a bitfield of 0 bits.
 		// Warning: this is not necessarily true!
 		return C.CXChildVisit_Continue
 	}
-	typ := C.tinygo_clang_getCursorType(c)
+	typ := clang_getCursorType(c)
 	field := &ast.Field{
 		Type: f.makeASTType(typ, f.getCursorPosition(c)),
 	}
-	offsetof := int64(C.clang_Type_getOffsetOf(C.tinygo_clang_getCursorType(parent), C.CString(name)))
-	alignOf := int64(C.clang_Type_getAlignOf(typ) * 8)
+	offsetof := int64(clang_Type_getOffsetOf(clang_getCursorType(parent), C.CString(name)))
+	alignOf := int64(clang_Type_getAlignOf(typ) * 8)
 	bitfieldOffset := offsetof % alignOf
 	if bitfieldOffset != 0 {
-		if C.tinygo_clang_Cursor_isBitField(c) != 1 {
+		if clang_Cursor_isBitField(c) != 1 {
 			f.addError(pos, "expected a bitfield")
 			return C.CXChildVisit_Continue
 		}
