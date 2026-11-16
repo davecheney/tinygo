@@ -5,8 +5,6 @@ package machine
 import (
 	"device/esp"
 	"runtime/interrupt"
-	"runtime/volatile"
-	"unsafe"
 )
 
 // GPIO matrix signals (IDF soc/esp32c6/include/soc/gpio_sig_map.h).
@@ -27,10 +25,8 @@ const (
 	gdmaInSucEOF = 1 << 1
 )
 
-// The generated DMA_Type puts OUT_CONF0_CH0 at 0x190, but it is at 0xD0
-// (IDF soc/esp32c6/include/soc/gdma_reg.h line 1650).
 var i2sGDMARegs = i2sGDMA{
-	outConf0:   (*volatile.Register32)(unsafe.Add(unsafe.Pointer(esp.DMA), 0xD0)),
+	outConf0:   &esp.DMA.OUT_CONF0_CH0,
 	outLink:    &esp.DMA.OUT_LINK_CH0,
 	outPeriSel: &esp.DMA.OUT_PERI_SEL_CH0,
 	outIntEna:  &esp.DMA.OUT_INT_ENA_CH0,

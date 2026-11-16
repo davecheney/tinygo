@@ -2,23 +2,27 @@ package main
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 )
 
+// Espressif GDMA OUT_CONF0_CH%s arrays start at 0x190, which is channel 1.
+// See https://github.com/espressif/svd/issues/41.
 func tweakSVD(d *SVDFile) {
-	if d.Name != "ESP32-P4" {
-		return
-	}
-	// AHB_DMA OUT_CONF0_CH%s at 0x190 is channel 1, not 0. See ESP-IDF
-	// components/soc/esp32p4/register/hw_ver{1,3}/soc/ahb_dma_reg.h.
 	for _, p := range d.Peripherals {
-		if p.Name != "AHB_DMA" {
-			continue
-		}
+		hasCH0 := slices.ContainsFunc(p.Registers, func(r *SVDRegister) bool {
+			return r.Name == "OUT_CONF0_CH0"
+		})
 		for _, r := range p.Registers {
-			if r.Name == "OUT_CONF0_CH%s" && r.DimIndex == nil {
-				idx := "1-2"
+			if r.Name != "OUT_CONF0_CH%s" || r.DimIndex != nil || r.AddressOffset == nil || *r.AddressOffset != "0x190" {
+				continue
+			}
+			if hasCH0 {
+				idx := "1-" + strconv.Itoa(decodeDim(r.Dim))
 				r.DimIndex = &idx
+			} else {
+				offset := "0xD0"
+				r.AddressOffset = &offset
 			}
 		}
 	}
