@@ -59,3 +59,5 @@ tool (
 	go.bytecodealliance.org/cmd/wit-bindgen-go
 	golang.org/x/tools/cmd/deadcode
 )
+
+replace tinygo.org/x/go-llvm => github.com/davecheney/go-llvm v0.0.0-20261125231520-b6de29ba324b
