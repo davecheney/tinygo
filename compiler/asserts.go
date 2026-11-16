@@ -92,7 +92,7 @@ func (b *builder) createSliceToArrayPointerCheck(sliceLen llvm.Value, arrayLen i
 	// From the spec:
 	// > If the length of the slice is less than the length of the array, a
 	// > run-time panic occurs.
-	arrayLenValue := llvm.ConstInt(b.uintptrType, uint64(arrayLen), false)
+	arrayLenValue := b.constArrayLen(arrayLen)
 	isLess := b.CreateICmp(llvm.IntULT, sliceLen, arrayLenValue, "")
 	b.createRuntimeAssert(isLess, "slicetoarray", "sliceToArrayPointerPanic")
 }

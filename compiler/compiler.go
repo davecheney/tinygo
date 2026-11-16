@@ -2639,6 +2639,19 @@ func (c *context) maxSliceSize(elementType llvm.Type) uint64 {
 	return maxSize
 }
 
+// constArrayLen returns the length n of an array type as a uintptr constant.
+// The length of an array type can be more than the largest uintptr, for
+// example *[1 << 16]T on a target with 16-bit pointers. ConstInt does not
+// accept such a value. Memory can not hold such an array, so this function
+// uses the largest uintptr.
+func (c *context) constArrayLen(n int64) llvm.Value {
+	maxLen := llvm.ConstAllOnes(c.uintptrType)
+	if uint64(n) > maxLen.ZExtValue() {
+		return maxLen
+	}
+	return llvm.ConstInt(c.uintptrType, uint64(n), false)
+}
+
 // goHeapAddressBits matches heapAddrBits for Go's common 64-bit targets.
 // See https://github.com/golang/go/blob/2ff5743d9fd52fac166225e75df0c2c1edf82abb/src/runtime/malloc.go#L207-L220.
 const goHeapAddressBits = 48
@@ -2830,7 +2843,7 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 			index = b.extendInteger(index, expr.Index.Type(), b.uintptrType)
 
 			// Check bounds.
-			arrayLen := llvm.ConstInt(b.uintptrType, uint64(xType.Len()), false)
+			arrayLen := b.constArrayLen(xType.Len())
 			b.createLookupBoundsCheck(arrayLen, index)
 
 			// Can't load directly from array (as index is non-constant), so
@@ -2858,7 +2871,7 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 			switch typ := typ.(type) {
 			case *types.Array:
 				bufptr = val
-				buflen = llvm.ConstInt(b.uintptrType, uint64(typ.Len()), false)
+				buflen = b.constArrayLen(typ.Len())
 				bufType = b.getLLVMType(typ)
 				// Check for nil pointer before calculating the address, from
 				// the spec:
@@ -3032,7 +3045,7 @@ func (b *builder) createExpr(expr ssa.Value) (llvm.Value, error) {
 			// slice an array
 			arrayType := typ.Elem().Underlying().(*types.Array)
 			length := arrayType.Len()
-			llvmLen := llvm.ConstInt(b.uintptrType, uint64(length), false)
+			llvmLen := b.constArrayLen(length)
 			if high.IsNil() {
 				high = llvmLen
 			}

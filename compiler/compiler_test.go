@@ -153,6 +153,7 @@ func TestCompiler(t *testing.T) {
 		{"go1.21.go", "", ""},
 		{"lenrange.go", "", ""},
 		{"lenrange.go", "arduino", ""},
+		{"arraylen.go", "arduino", ""},
 		{"lenrange-wasmexport.go", "", ""},
 	}
 	if goMinor >= 27 {
