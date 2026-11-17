@@ -78,10 +78,11 @@ entry:
   ret %runtime._interface { ptr @"reflect/types.type:pointer:named:error", ptr null }
 }
 
-define weak_odr void @"reflect/call:func:{}{basic:string}"(i32 %0, ptr %1, ptr %2, ptr %3, ptr %4) {
+; Function Attrs: nounwind
+define weak_odr void @"reflect/call:func:{}{basic:string}"(i32 %0, ptr %1, ptr %2, ptr %3, ptr %4) #1 {
 entry:
   %5 = inttoptr i32 %0 to ptr
-  %6 = call %runtime._string %5(ptr %1)
+  %6 = call %runtime._string %5(ptr %1) #7
   %7 = load ptr, ptr %3, align 4
   %.elt = extractvalue %runtime._string %6, 0
   store ptr %.elt, ptr %7, align 4

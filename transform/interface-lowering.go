@@ -848,7 +848,7 @@ func (p *lowerInterfacesPass) defineInterfaceMethodFunc(fn llvm.Value, itf *inte
 	actualType.SetName("actualType")
 	fn.SetLinkage(llvm.InternalLinkage)
 	fn.SetUnnamedAddr(true)
-	AddStandardAttributes(fn, p.config)
+	p.config.StandardAttributes().Apply(fn)
 
 	// Collect the params that will be passed to the functions to call.
 	// These params exclude the receiver (which may actually consist of multiple
@@ -955,7 +955,7 @@ func (p *lowerInterfacesPass) defineInterfaceAssertFunc(fn llvm.Value, itf *inte
 	actualType.SetName("actualType")
 	fn.SetLinkage(llvm.InternalLinkage)
 	fn.SetUnnamedAddr(true)
-	AddStandardAttributes(fn, p.config)
+	p.config.StandardAttributes().Apply(fn)
 
 	entry := p.ctx.AddBasicBlock(fn, "entry")
 	p.builder.SetInsertPointAtEnd(entry)

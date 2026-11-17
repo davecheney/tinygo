@@ -65,6 +65,69 @@ func (attrs FunctionUsageAttributes) Apply(fn llvm.Value) {
 	}
 }
 
+// FunctionAttributes are the attributes that TinyGo adds to every function it
+// declares or defines.
+type FunctionAttributes struct {
+	SizeLevel int
+	CPU       string
+	Features  string
+	Triple    string
+}
+
+// ApplyDeclared adds attributes that are set for any function, whether
+// declared or defined.
+func (attrs *FunctionAttributes) ApplyDeclared(fn llvm.Value) {
+	ctx := fn.GlobalParent().Context()
+	if attrs.SizeLevel >= 1 {
+		// Set the "optsize" attribute to make slightly smaller binaries at the
+		// cost of minimal performance loss (-Os in Clang).
+		fn.AddFunctionAttr(ctx.CreateEnumAttribute(llvm.AttributeKindID("optsize"), 0))
+	}
+	if attrs.SizeLevel >= 2 {
+		// Set the "minsize" attribute to reduce code size even further,
+		// regardless of performance loss (-Oz in Clang).
+		fn.AddFunctionAttr(ctx.CreateEnumAttribute(llvm.AttributeKindID("minsize"), 0))
+	}
+	if attrs.CPU != "" {
+		fn.AddFunctionAttr(ctx.CreateStringAttribute("target-cpu", attrs.CPU))
+	}
+	if attrs.Features != "" {
+		fn.AddFunctionAttr(ctx.CreateStringAttribute("target-features", attrs.Features))
+	}
+}
+
+// Apply adds the attributes of a function defined by TinyGo (even
+// thunks/wrappers), possibly depending on the architecture.
+func (attrs *FunctionAttributes) Apply(fn llvm.Value) {
+	attrs.ApplyDeclared(fn)
+	ctx := fn.GlobalParent().Context()
+	// TinyGo does not currently raise exceptions, so set the 'nounwind' flag.
+	// This behavior matches Clang when compiling C source files.
+	// It reduces binary size on Linux a little bit on non-x86_64 targets by
+	// eliminating exception tables for these functions.
+	fn.AddFunctionAttr(ctx.CreateEnumAttribute(llvm.AttributeKindID("nounwind"), 0))
+	if strings.Split(attrs.Triple, "-")[0] == "x86_64" {
+		// Required by the ABI.
+		// The uwtable has two possible values: sync (1) or async (2). We use
+		// sync because we currently don't use async unwind tables.
+		// For details, see: https://llvm.org/docs/LangRef.html#function-attributes
+		fn.AddFunctionAttr(ctx.CreateEnumAttribute(llvm.AttributeKindID("uwtable"), 1))
+	}
+	if attrs.hasFramePointers() {
+		fn.AddFunctionAttr(ctx.CreateStringAttribute("frame-pointer", "all"))
+	}
+}
+
+// hasFramePointers reports whether functions keep a frame pointer, so that
+// perf and other frame pointer unwinders can walk native Linux stacks.
+func (attrs *FunctionAttributes) hasFramePointers() bool {
+	parts := strings.Split(attrs.Triple, "-")
+	if len(parts) < 3 || parts[2] != "linux" {
+		return false
+	}
+	return parts[0] == "x86_64" || parts[0] == "aarch64"
+}
+
 // CreateEntryBlockAlloca creates a new alloca in the entry block, even though
 // the IR builder is located elsewhere. It assumes that the insert point is
 // at the end of the current block.

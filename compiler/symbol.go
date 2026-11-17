@@ -169,7 +169,7 @@ func (c *context) getFunction(fn *ssa.Function) (llvm.Type, llvm.Value) {
 			llvmFn.AddFunctionAttr(attr)
 		}
 	}
-	c.addStandardDeclaredAttributes(llvmFn)
+	c.FunctionAttributes.ApplyDeclared(llvmFn)
 
 	dereferenceableOrNullKind := llvm.AttributeKindID("dereferenceable_or_null")
 	for i, paramInfo := range paramInfos {
@@ -812,69 +812,6 @@ func getParams(sig *types.Signature) iter.Seq2[int, *types.Var] {
 			i++
 		}
 	}
-}
-
-// addStandardDeclaredAttributes adds attributes that are set for any function,
-// whether declared or defined.
-func (c *context) addStandardDeclaredAttributes(llvmFn llvm.Value) {
-	if c.SizeLevel >= 1 {
-		// Set the "optsize" attribute to make slightly smaller binaries at the
-		// cost of minimal performance loss (-Os in Clang).
-		kind := llvm.AttributeKindID("optsize")
-		attr := c.ctx.CreateEnumAttribute(kind, 0)
-		llvmFn.AddFunctionAttr(attr)
-	}
-	if c.SizeLevel >= 2 {
-		// Set the "minsize" attribute to reduce code size even further,
-		// regardless of performance loss (-Oz in Clang).
-		kind := llvm.AttributeKindID("minsize")
-		attr := c.ctx.CreateEnumAttribute(kind, 0)
-		llvmFn.AddFunctionAttr(attr)
-	}
-	if c.CPU != "" {
-		llvmFn.AddFunctionAttr(c.ctx.CreateStringAttribute("target-cpu", c.CPU))
-	}
-	if c.Features != "" {
-		llvmFn.AddFunctionAttr(c.ctx.CreateStringAttribute("target-features", c.Features))
-	}
-}
-
-// addStandardDefinedAttributes adds the set of attributes that are added to
-// every function defined by TinyGo (even thunks/wrappers), possibly depending
-// on the architecture. It does not set attributes only set for declared
-// functions, use addStandardDeclaredAttributes for this.
-func (c *context) addStandardDefinedAttributes(llvmFn llvm.Value) {
-	// TinyGo does not currently raise exceptions, so set the 'nounwind' flag.
-	// This behavior matches Clang when compiling C source files.
-	// It reduces binary size on Linux a little bit on non-x86_64 targets by
-	// eliminating exception tables for these functions.
-	llvmFn.AddFunctionAttr(c.ctx.CreateEnumAttribute(llvm.AttributeKindID("nounwind"), 0))
-	if strings.Split(c.Triple, "-")[0] == "x86_64" {
-		// Required by the ABI.
-		// The uwtable has two possible values: sync (1) or async (2). We use
-		// sync because we currently don't use async unwind tables.
-		// For details, see: https://llvm.org/docs/LangRef.html#function-attributes
-		llvmFn.AddFunctionAttr(c.ctx.CreateEnumAttribute(llvm.AttributeKindID("uwtable"), 1))
-	}
-	if c.hasFramePointers() {
-		llvmFn.AddFunctionAttr(c.ctx.CreateStringAttribute("frame-pointer", "all"))
-	}
-}
-
-// hasFramePointers reports whether functions keep a frame pointer, so that
-// perf and other frame pointer unwinders can walk native Linux stacks.
-func (c *context) hasFramePointers() bool {
-	parts := strings.Split(c.Triple, "-")
-	if len(parts) < 3 || parts[2] != "linux" {
-		return false
-	}
-	return parts[0] == "x86_64" || parts[0] == "aarch64"
-}
-
-// addStandardAttributes adds all attributes added to defined functions.
-func (c *context) addStandardAttributes(llvmFn llvm.Value) {
-	c.addStandardDeclaredAttributes(llvmFn)
-	c.addStandardDefinedAttributes(llvmFn)
 }
 
 // globalInfo contains some information about a specific global. By default,

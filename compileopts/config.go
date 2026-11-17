@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/google/shlex"
+	"github.com/tinygo-org/tinygo/compiler/llvmutil"
 	"github.com/tinygo-org/tinygo/goenv"
 )
 
@@ -227,6 +228,18 @@ func (c *Config) OptLevel() (level string, speedLevel, sizeLevel int) {
 		// This is not shown to the user: valid choices are already checked as
 		// part of Options.Verify(). It is here as a sanity check.
 		panic("unknown optimization level: -opt=" + c.Options.Opt)
+	}
+}
+
+// StandardAttributes returns the attributes that TinyGo adds to every function
+// it defines.
+func (c *Config) StandardAttributes() *llvmutil.FunctionAttributes {
+	_, _, sizeLevel := c.OptLevel()
+	return &llvmutil.FunctionAttributes{
+		SizeLevel: sizeLevel,
+		CPU:       c.CPU(),
+		Features:  c.Features(),
+		Triple:    c.Triple(),
 	}
 }
 

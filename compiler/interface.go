@@ -755,6 +755,7 @@ func (c *context) getReflectCallWrapper(sig *types.Signature) llvm.Value {
 	}, false)
 	wrapper := llvm.AddFunction(c.mod, name, wrapperType)
 	wrapper.SetLinkage(llvm.WeakODRLinkage)
+	c.FunctionAttributes.Apply(wrapper)
 
 	irbuilder := c.ctx.NewBuilder()
 	defer irbuilder.Dispose()
@@ -1605,7 +1606,7 @@ func (c *context) getInvokeFunction(instr *ssa.CallCommon) llvm.Value {
 		paramTuple = append(paramTuple, types.NewVar(token.NoPos, nil, "$typecode", types.Typ[types.UnsafePointer]))
 		llvmFnType := c.getLLVMFunctionType(types.NewSignature(sig.Recv(), types.NewTuple(paramTuple...), sig.Results(), false))
 		llvmFn = llvm.AddFunction(c.mod, fnName, llvmFnType)
-		c.addStandardDeclaredAttributes(llvmFn)
+		c.FunctionAttributes.ApplyDeclared(llvmFn)
 		llvmFn.AddFunctionAttr(c.ctx.CreateStringAttribute("tinygo-invoke", c.getMethodSignatureName(instr.Method)))
 		if _, indirect := c.hasIndirectResult(sig); indirect {
 			llvmFn.AddFunctionAttr(c.ctx.CreateStringAttribute("tinygo-indirect-result", "true"))
@@ -1632,7 +1633,7 @@ func (b *builder) createInterfaceTypeAssert(intf *types.Interface, actualType ll
 	if llvmFn.IsNil() {
 		llvmFnType := llvm.FunctionType(b.i1, []llvm.Type{b.dataPtrType}, false)
 		llvmFn = llvm.AddFunction(b.mod, fnName, llvmFnType)
-		b.addStandardDeclaredAttributes(llvmFn)
+		b.FunctionAttributes.ApplyDeclared(llvmFn)
 		methods := b.getMethodsString(intf)
 		llvmFn.AddFunctionAttr(b.ctx.CreateStringAttribute("tinygo-methods", methods))
 	}
@@ -1687,7 +1688,7 @@ func (c *context) getInterfaceInvokeWrapper(fn *ssa.Function, llvmFnType llvm.Ty
 			}
 			paramTypes = append(paramTypes, c.dataPtrType)
 			wrapper = llvm.AddFunction(c.mod, wrapperName, llvm.FunctionType(resultType, paramTypes, false))
-			c.addStandardDeclaredAttributes(wrapper)
+			c.FunctionAttributes.ApplyDeclared(wrapper)
 			if c.Debug {
 				pos := c.program.Fset.Position(fn.Pos())
 				c.attachDebugInfoDeclarationRaw(fn, wrapper, "$invoke", pos.Filename, pos.Line)
@@ -1730,7 +1731,7 @@ func (c *context) getInterfaceInvokeWrapper(fn *ssa.Function, llvmFnType llvm.Ty
 	paramTypes = append(paramTypes, fnParamTypes[resultOffset+len(expandedReceiverType):]...)
 	wrapFnType := llvm.FunctionType(llvmFnType.ReturnType(), paramTypes, false)
 	wrapper = llvm.AddFunction(c.mod, wrapperName, wrapFnType)
-	c.addStandardAttributes(wrapper)
+	c.FunctionAttributes.Apply(wrapper)
 
 	wrapper.SetLinkage(llvm.LinkOnceODRLinkage)
 	wrapper.SetUnnamedAddr(true)

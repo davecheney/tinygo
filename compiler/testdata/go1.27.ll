@@ -53,19 +53,21 @@ entry:
   ret { %runtime._interface, %runtime._interface } { %runtime._interface { ptr getelementptr ({ ptr, i8, i16, ptr, ptr, ptr, { i32, [1 x ptr], [1 x ptr], [1 x ptr] }, [19 x i8] }, ptr @"reflect/types.type:named:main.genericMethod", i32 0, i32 1), ptr null }, %runtime._interface { ptr @"reflect/types.type:named:main.onlyGenericMethod", ptr null } }
 }
 
-define weak_odr void @"reflect/call:func:{named:main.genericMethod,basic:int}{basic:int}"(i32 %0, ptr %1, ptr %2, ptr %3, ptr %4) {
+; Function Attrs: nounwind
+define weak_odr void @"reflect/call:func:{named:main.genericMethod,basic:int}{basic:int}"(i32 %0, ptr %1, ptr %2, ptr %3, ptr %4) #1 {
 entry:
   %5 = inttoptr i32 %0 to ptr
   %6 = getelementptr inbounds nuw i8, ptr %2, i32 4
   %7 = load ptr, ptr %6, align 4
   %8 = load i32, ptr %7, align 4
-  %9 = call i32 %5(i32 %8, ptr %1)
+  %9 = call i32 %5(i32 %8, ptr %1) #2
   %10 = load ptr, ptr %3, align 4
   store i32 %9, ptr %10, align 4
   ret void
 }
 
-define weak_odr void @"reflect/call:func:{pointer:named:main.genericMethod,basic:int}{basic:int}"(i32 %0, ptr %1, ptr %2, ptr %3, ptr %4) {
+; Function Attrs: nounwind
+define weak_odr void @"reflect/call:func:{pointer:named:main.genericMethod,basic:int}{basic:int}"(i32 %0, ptr %1, ptr %2, ptr %3, ptr %4) #1 {
 entry:
   %5 = inttoptr i32 %0 to ptr
   %6 = load ptr, ptr %2, align 4
@@ -73,7 +75,7 @@ entry:
   %8 = getelementptr inbounds nuw i8, ptr %2, i32 4
   %9 = load ptr, ptr %8, align 4
   %10 = load i32, ptr %9, align 4
-  %11 = call i32 %5(ptr %7, i32 %10, ptr %1)
+  %11 = call i32 %5(ptr %7, i32 %10, ptr %1) #2
   %12 = load ptr, ptr %3, align 4
   store i32 %11, ptr %12, align 4
   ret void

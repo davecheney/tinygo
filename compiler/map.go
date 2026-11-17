@@ -390,7 +390,7 @@ func (b *builder) getOrGenerateKeyHashFunc(keyType types.Type) llvm.Value {
 	fn := llvm.AddFunction(b.mod, name, fnType)
 	fn.SetLinkage(llvm.LinkOnceODRLinkage)
 	fn.SetUnnamedAddr(true)
-	b.addStandardAttributes(fn)
+	b.FunctionAttributes.Apply(fn)
 
 	// Generate the function body.
 	savedBlock := b.GetInsertBlock()
@@ -425,7 +425,7 @@ func (b *builder) getOrGenerateKeyEqualFunc(keyType types.Type) llvm.Value {
 	fn := llvm.AddFunction(b.mod, name, fnType)
 	fn.SetLinkage(llvm.LinkOnceODRLinkage)
 	fn.SetUnnamedAddr(true)
-	b.addStandardAttributes(fn)
+	b.FunctionAttributes.Apply(fn)
 
 	// Generate the function body.
 	savedBlock := b.GetInsertBlock()

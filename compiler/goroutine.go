@@ -165,7 +165,7 @@ func (b *builder) createWasmExport() {
 	paramTypes := b.llvmFnType.ParamTypes()
 	exportedFnType := llvm.FunctionType(b.llvmFnType.ReturnType(), paramTypes[:len(paramTypes)-1], false)
 	exportedFn := llvm.AddFunction(b.mod, b.getFunctionInfo(b.fn).linkName+suffix, exportedFnType)
-	b.addStandardAttributes(exportedFn)
+	b.FunctionAttributes.Apply(exportedFn)
 	llvmutil.AppendToGlobal(b.mod, "llvm.used", exportedFn)
 	exportedFn.AddFunctionAttr(b.ctx.CreateStringAttribute("wasm-export-name", b.info.wasmExport))
 
@@ -341,7 +341,7 @@ func (c *context) createGoroutineStartWrapper(fnType llvm.Type, fn llvm.Value, p
 		// Create the wrapper.
 		wrapperType := llvm.FunctionType(c.void, []llvm.Type{c.dataPtrType}, false)
 		wrapper = llvm.AddFunction(c.mod, wrapperName, wrapperType)
-		c.addStandardAttributes(wrapper)
+		c.FunctionAttributes.Apply(wrapper)
 		wrapper.SetLinkage(llvm.LinkOnceODRLinkage)
 		wrapper.SetUnnamedAddr(true)
 		wrapper.AddAttributeAtIndex(-1, c.ctx.CreateStringAttribute("tinygo-gowrapper", name))
@@ -497,7 +497,7 @@ func (c *context) createGoroutineStartWrapper(fnType llvm.Type, fn llvm.Value, p
 		// Create the wrapper.
 		wrapperType := llvm.FunctionType(c.void, []llvm.Type{c.dataPtrType}, false)
 		wrapper = llvm.AddFunction(c.mod, prefix+".gowrapper", wrapperType)
-		c.addStandardAttributes(wrapper)
+		c.FunctionAttributes.Apply(wrapper)
 		wrapper.SetLinkage(llvm.LinkOnceODRLinkage)
 		wrapper.SetUnnamedAddr(true)
 		wrapper.AddAttributeAtIndex(-1, c.ctx.CreateStringAttribute("tinygo-gowrapper", ""))

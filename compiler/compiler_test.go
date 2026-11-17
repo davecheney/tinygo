@@ -892,8 +892,12 @@ func testCompilePackageWithDebug(t *testing.T, options *compileopts.Options, fil
 		Target:  target,
 	}
 	compilerConfig := &Config{
-		Triple:             config.Triple(),
-		Features:           config.Features(),
+		Triple:   config.Triple(),
+		Features: config.Features(),
+		FunctionAttributes: llvmutil.FunctionAttributes{
+			Triple:   config.Triple(),
+			Features: config.Features(),
+		},
 		ABI:                config.ABI(),
 		GOOS:               config.GOOS(),
 		GOARCH:             config.GOARCH(),

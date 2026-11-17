@@ -40,18 +40,19 @@ func init() {
 // code must be recompiled.
 type Config struct {
 	// Target and output information.
-	Triple          string
-	CPU             string
-	Features        string
-	ABI             string
-	GOOS            string
-	GOARCH          string
-	BuildMode       string
-	CodeModel       string
-	RelocationModel string
-	SizeLevel       int
-	TinyGoVersion   string // for llvm.ident
-	TrimPath        bool
+	Triple             string
+	CPU                string
+	Features           string
+	ABI                string
+	GOOS               string
+	GOARCH             string
+	BuildMode          string
+	CodeModel          string
+	RelocationModel    string
+	SizeLevel          int
+	FunctionAttributes llvmutil.FunctionAttributes
+	TinyGoVersion      string // for llvm.ident
+	TrimPath           bool
 
 	// Various compiler options that determine how code is generated.
 	Scheduler          string
@@ -1229,7 +1230,7 @@ func (b *builder) createFunctionStart(intrinsic bool) {
 		return
 	}
 
-	b.addStandardDefinedAttributes(b.llvmFn)
+	b.FunctionAttributes.Apply(b.llvmFn)
 	if b.info.isNoRuntime() {
 		b.llvmFn.AddFunctionAttr(b.ctx.CreateStringAttribute("tinygo-noruntime", ""))
 	}

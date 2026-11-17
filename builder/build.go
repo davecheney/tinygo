@@ -230,18 +230,19 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (*BuildR
 
 	optLevel, speedLevel, sizeLevel := config.OptLevel()
 	compilerConfig := &compiler.Config{
-		Triple:          config.Triple(),
-		CPU:             config.CPU(),
-		Features:        config.Features(),
-		ABI:             config.ABI(),
-		GOOS:            config.GOOS(),
-		GOARCH:          config.GOARCH(),
-		BuildMode:       config.BuildMode(),
-		CodeModel:       config.CodeModel(),
-		RelocationModel: config.RelocationModel(),
-		SizeLevel:       sizeLevel,
-		TinyGoVersion:   goenv.Version(),
-		TrimPath:        config.TrimPath(),
+		Triple:             config.Triple(),
+		CPU:                config.CPU(),
+		Features:           config.Features(),
+		ABI:                config.ABI(),
+		GOOS:               config.GOOS(),
+		GOARCH:             config.GOARCH(),
+		BuildMode:          config.BuildMode(),
+		CodeModel:          config.CodeModel(),
+		RelocationModel:    config.RelocationModel(),
+		SizeLevel:          sizeLevel,
+		FunctionAttributes: *config.StandardAttributes(),
+		TinyGoVersion:      goenv.Version(),
+		TrimPath:           config.TrimPath(),
 
 		Scheduler:          config.Scheduler(),
 		AutomaticStackSize: config.AutomaticStackSize(),
@@ -674,7 +675,7 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (*BuildR
 			llvmInitFn := mod.NamedFunction("runtime.initAll")
 			llvmInitFn.SetLinkage(llvm.InternalLinkage)
 			llvmInitFn.SetUnnamedAddr(true)
-			transform.AddStandardAttributes(llvmInitFn, config)
+			config.StandardAttributes().Apply(llvmInitFn)
 			llvmInitFn.Param(0).SetName("context")
 			block := mod.Context().AddBasicBlock(llvmInitFn, "entry")
 			irbuilder := mod.Context().NewBuilder()
