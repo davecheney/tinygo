@@ -18,8 +18,9 @@ Delete it before any of this is upstreamed.
 
 ## Status (2026-11-17)
 
-Fresh worktree `.claude/worktrees/go128-dev` on `origin/dev` @ `7db05af8` plus commit 1 only.
-The old `~/devel/tinygo-go1.28` checkout was removed. Commit 2 below was never committed and is lost, so it needs redoing.
+Worktree `.claude/worktrees/go128-dev`, branch `worktree-go128-dev` on `davecheney`, based on `origin/dev` @ `7db05af8`.
+The old `~/devel/tinygo-go1.28` checkout was removed. Commit 2 was lost with it and has been redone here.
+`~/devel/go` is still at `3c6d092895`. Go master was at `98ead39515` on 2026-11-17, so update and rerun.
 
 | Check | Result |
 |---|---|
@@ -27,7 +28,9 @@ The old `~/devel/tinygo-go1.28` checkout was removed. Commit 2 below was never c
 | `tinygo run hello.go` (host) | OK |
 | `tinygo run -target=riscv-qemu` | OK |
 | `tinygo build -target=wasip1` | OK |
-| `tinygo run -target=cortex-m-qemu` | Fails, `gcc: error: unrecognized command-line option '-marm'` (#6357) |
+| `tinygo run -target=cortex-m-qemu` | OK with commit 2, failed with `-marm` before it (#6357) |
+| Same smoke tests with go1.27.4 and commit 2 | OK |
+| `go test ./loader`, `TestGetListOfPackages` | OK |
 
 ## Status (2026-11-16)
 
