@@ -1268,13 +1268,7 @@ func (r *runner) runAtRuntime(fn *function, inst instruction, locals []value, me
 			return r.errorAt(inst, err)
 		}
 		result = r.builder.CreateLoad(inst.llvmInst.Type(), operands[0], inst.name)
-		result.SetAlignment(inst.llvmInst.Alignment())
-		if inst.llvmInst.IsVolatile() {
-			result.SetVolatile(true)
-		}
-		if ordering := inst.llvmInst.Ordering(); ordering != llvm.AtomicOrderingNotAtomic {
-			result.SetOrdering(ordering)
-		}
+		readMemoryAccess(inst.llvmInst).apply(result)
 	case llvm.Store:
 		// Runtime code can read objects through the stored value.
 		for _, op := range operands {
@@ -1284,13 +1278,7 @@ func (r *runner) runAtRuntime(fn *function, inst instruction, locals []value, me
 			}
 		}
 		result = r.builder.CreateStore(operands[0], operands[1])
-		result.SetAlignment(inst.llvmInst.Alignment())
-		if inst.llvmInst.IsVolatile() {
-			result.SetVolatile(true)
-		}
-		if ordering := inst.llvmInst.Ordering(); ordering != llvm.AtomicOrderingNotAtomic {
-			result.SetOrdering(ordering)
-		}
+		readMemoryAccess(inst.llvmInst).apply(result)
 	case llvm.AtomicRMW, llvm.AtomicCmpXchg:
 		for _, op := range operands {
 			err := mem.markExternalStore(op)
@@ -1402,4 +1390,26 @@ func intPredicateString(predicate llvm.IntPredicate) string {
 // debugf prints a debug line indented by the call depth.
 func (r *runner) debugf(depth int, format string, args ...any) {
 	fmt.Fprintf(os.Stderr, strings.Repeat("    ", depth)+format+"\n", args...)
+}
+
+// memoryAccess holds the properties of a load or store that must stay the same
+// when it is emitted at runtime.
+type memoryAccess struct {
+	alignment int
+	volatile  bool
+	ordering  llvm.AtomicOrdering
+}
+
+func readMemoryAccess(inst llvm.Value) *memoryAccess {
+	return &memoryAccess{
+		alignment: inst.Alignment(),
+		volatile:  inst.IsVolatile(),
+		ordering:  inst.Ordering(),
+	}
+}
+
+func (access *memoryAccess) apply(inst llvm.Value) {
+	inst.SetAlignment(access.alignment)
+	inst.SetVolatile(access.volatile)
+	inst.SetOrdering(access.ordering)
 }
