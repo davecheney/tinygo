@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build linux && !baremetal && !tinygo.wasm && !nintendoswitch
+//go:build (linux || darwin) && !baremetal && !tinygo.wasm && !nintendoswitch
 
 package os
 
@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"unsafe"
 )
 
 // The only signal values guaranteed to be present in the os package on all
@@ -65,23 +64,6 @@ func (p *Process) wait() (*ProcessState, error) {
 		return nil, NewSyscallError("wait", err)
 	}
 	return &ProcessState{pid: pid, status: status}, nil
-}
-
-// blockUntilWaitable waits for the child to exit but leaves it for wait4 to reap.
-func (p *Process) blockUntilWaitable() error {
-	const _P_PID = 1
-	var siginfo [16]uint64
-	for {
-		_, _, errno := syscall.Syscall6(syscall.SYS_WAITID, _P_PID, uintptr(p.Pid), uintptr(unsafe.Pointer(&siginfo[0])), syscall.WEXITED|syscall.WNOWAIT, 0, 0)
-		switch errno {
-		case 0:
-			return nil
-		case syscall.EINTR:
-			continue
-		default:
-			return NewSyscallError("waitid", errno)
-		}
-	}
 }
 
 func (p *Process) signal(sig Signal) error {

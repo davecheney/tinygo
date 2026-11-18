@@ -1,8 +1,9 @@
-//go:build linux && !baremetal && !tinygo.wasm && !nintendoswitch
+//go:build (linux || darwin) && !baremetal && !tinygo.wasm && !nintendoswitch
 
 package os
 
 import (
+	"internal/syscall/unix"
 	"runtime"
 	"syscall"
 	"unsafe"
@@ -31,16 +32,20 @@ func spawn(path string, argv []string, attr *ProcAttr) (int, error) {
 			errno = libc_posix_spawn_file_actions_addclose(&fa, int32(i))
 		} else {
 			fd := int(f.Fd())
-			if fd < len(files) && fd != i {
-				// An earlier action could replace fd, so pass a copy above the slots.
-				nfd, err := dupCloexec(fd, len(files))
-				if err != nil {
-					return 0, err
+			if fd == i {
+				errno = spawnKeepFd(&fa, int32(fd))
+			} else {
+				if fd < len(files) {
+					// An earlier action could replace fd, so pass a copy above the slots.
+					nfd, err := dupCloexec(fd, len(files))
+					if err != nil {
+						return 0, err
+					}
+					defer syscall.Close(nfd)
+					fd = nfd
 				}
-				defer syscall.Close(nfd)
-				fd = nfd
+				errno = libc_posix_spawn_file_actions_adddup2(&fa, int32(fd), int32(i))
 			}
-			errno = libc_posix_spawn_file_actions_adddup2(&fa, int32(fd), int32(i))
 		}
 		if errno != 0 {
 			return 0, syscall.Errno(errno)
@@ -51,7 +56,9 @@ func spawn(path string, argv []string, attr *ProcAttr) (int, error) {
 	argvp := cstrings(argv)
 	envp := cstrings(attr.Env)
 	var pid int32
+	syscall.ForkLock.Lock()
 	errno := libc_posix_spawn(&pid, &pathp[0], &fa, nil, &argvp[0], &envp[0])
+	syscall.ForkLock.Unlock()
 	runtime.KeepAlive(files)
 	if errno != 0 {
 		return 0, syscall.Errno(errno)
@@ -61,11 +68,7 @@ func spawn(path string, argv []string, attr *ProcAttr) (int, error) {
 
 // dupCloexec returns a close-on-exec copy of fd at the lowest free fd that is not below min.
 func dupCloexec(fd, min int) (int, error) {
-	nfd, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_DUPFD_CLOEXEC, uintptr(min))
-	if errno != 0 {
-		return 0, errno
-	}
-	return int(nfd), nil
+	return unix.Fcntl(fd, syscall.F_DUPFD_CLOEXEC, min)
 }
 
 func cstring(s string) []byte {
@@ -84,13 +87,6 @@ func cstrings(ss []string) []*byte {
 	return p
 }
 
-// spawnFileActions has the layout of posix_spawn_file_actions_t in musl and glibc.
-type spawnFileActions struct {
-	_       [2]int32
-	actions unsafe.Pointer
-	_       [16]int32
-}
-
 // The posix_spawn functions return an error number instead of setting errno, see
 // https://pubs.opengroup.org/onlinepubs/9799919799/functions/posix_spawn.html
 //
@@ -103,7 +99,7 @@ func libc_posix_spawn_file_actions_init(fa *spawnFileActions) int32
 //export posix_spawn_file_actions_destroy
 func libc_posix_spawn_file_actions_destroy(fa *spawnFileActions) int32
 
-// posix_spawn_file_actions_addchdir_np is in musl 1.1.24 and glibc 2.29.
+// posix_spawn_file_actions_addchdir_np is in musl 1.1.24, glibc 2.29 and macOS 10.15.
 //
 //export posix_spawn_file_actions_addchdir_np
 func libc_posix_spawn_file_actions_addchdir_np(fa *spawnFileActions, path *byte) int32

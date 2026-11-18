@@ -63,6 +63,17 @@ func libc_getpagesize() int32
 //export __error
 func libc_errno_location() *int32
 
+// fcntl is variadic, so call the fixed-signature wrapper in os_darwin.c.
+//
+//export syscall_libc_fcntl
+func libc_fcntl(fd, cmd, arg uintptr) int32
+
+func fcntl(fd int32, cmd int32, arg int32) (ret int32, errno int32) {
+	ret = libc_fcntl(uintptr(fd), uintptr(cmd), uintptr(arg))
+	errno = *libc_errno_location()
+	return
+}
+
 //export tinygo_syscall
 func call_syscall(fn, a1, a2, a3 uintptr) int32
 
