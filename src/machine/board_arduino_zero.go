@@ -53,6 +53,8 @@ const (
 	SPI0_SCK_PIN Pin = PA17 // SCK:  SERCOM1/PAD[3]
 )
 
+var SPI0 = sercomSPIM1
+
 // SPI pins (Legacy ICSP)
 const (
 	SPI1_SDO_PIN Pin = PB10 // MOSI: SERCOM4/PAD[2] - Pin 4
@@ -60,11 +62,15 @@ const (
 	SPI1_SCK_PIN Pin = PB11 // SCK:  SERCOM4/PAD[3] - Pin 3
 )
 
+var SPI1 = sercomSPIM4
+
 // I2C pins - EDBG connected
 const (
 	SDA_PIN Pin = PA22 // SDA: SERCOM3/PAD[0] - Pin 20
 	SCL_PIN Pin = PA23 // SCL: SERCOM3/PAD[1] - Pin 21
 )
+
+var I2C0 = sercomI2CM3
 
 // I2S pins - might not be exposed
 const (
