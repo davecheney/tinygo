@@ -1,4 +1,4 @@
-//go:build linux && !baremetal && !tinygo.wasm
+//go:build (linux || darwin) && !baremetal && !tinygo.wasm
 
 package os_test
 
@@ -134,7 +134,7 @@ func TestProcAttrFilesNil(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	script := "if [ -e /proc/$$/fd/2 ]; then echo open; else echo closed; fi"
+	script := "if [ -e /dev/fd/2 ]; then echo open; else echo closed; fi"
 	out := startWithFiles(t, script, []*File{Stdin, w, nil}, []*File{w}, []*File{r})
 	if out[0] != "closed\n" {
 		t.Fatalf("fd 2 is %q, want %q", out[0], "closed\n")
@@ -179,9 +179,7 @@ func TestProcAttrFilesSameFd(t *testing.T) {
 	if fd > 9 {
 		t.Skipf("pipe fd %d is too high for sh redirections", fd)
 	}
-	if _, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), syscall.F_SETFD, syscall.FD_CLOEXEC); errno != 0 {
-		t.Fatal(errno)
-	}
+	syscall.CloseOnExec(fd)
 	files := make([]*File, fd+1)
 	files[0], files[1], files[2] = Stdin, Stdout, Stderr
 	files[fd] = w
