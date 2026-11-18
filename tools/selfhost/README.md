@@ -8,7 +8,11 @@ let tinygo build tinygo. It is a long running branch. Rebase it onto
 
 Run on linux amd64 with the system LLVM:
 
-    tools/selfhost/stages.sh
+    tools/selfhost/stages-linux.sh
+
+Run on macOS arm64 with Homebrew LLVM:
+
+    tools/selfhost/stages-macos.sh
 
 | Stage | Built by | Output |
 |-------|----------|--------|
@@ -17,9 +21,13 @@ Run on linux amd64 with the system LLVM:
 | 3 | stage 2 | `build/stage3/tinygo` |
 
 `LLVM` selects the LLVM version (default 23) and `OPT` the optimization level
-for stages 2 and 3 (default `s`). The script prints the version of each stage,
+for stages 2 and 3 (default `s`). Each script prints the version of each stage,
 checks whether stage 2 and stage 3 are identical, and runs a hello program
 with stage 3.
+
+The macOS script builds stages 2 and 3 with copies of `go.bug.st/serial` and
+`tinygo.org/x/go-llvm` in `build/selfhost-macos`. The serial copy does not use
+IOKit, and the go-llvm copy does not pass `-Wl,` flags to ld.lld.
 
 ## Results
 
