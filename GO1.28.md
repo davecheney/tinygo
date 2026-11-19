@@ -7,14 +7,23 @@ Delete it before any of this is upstreamed.
 
 ## Setup
 
-- Go at tip: `~/devel/go` (`cd src && ./make.bash`). First checked at
-  `go1.28-devel_3c6d092895` (2026-11-15).
-- Branch base: tinygo `origin/dev` @ `7db05af8` (2026-11-17, was `c35ae925`). Rebase onto `origin/dev`
-  periodically; keep go1.28-only fixes as small, separate commits.
-- Build: `PATH=~/devel/go/bin:$PATH go build -tags llvm23 -o build/tinygo .`
-  (system LLVM was 23.1.5). Submodules are needed for running tinygo
-  (`git submodule update --init`). Don't symlink `src/net`: the GOROOT
-  overlay treats a symlinked dir as a file and fails with "file exists".
+- Go at tip: `~/devel/go`. Update with `git pull` on master, then `cd src && ./make.bash`.
+- Branch base: tinygo `origin/dev`. Rebase onto it on each run, keep go1.28-only fixes as small, separate commits.
+- Build: `PATH=~/devel/go/bin:$PATH make tinygo LLVM_BUILDDIR=~/devel/tinygo/llvm-build LLVM_PROJECTDIR=~/devel/tinygo/llvm-project` (byollvm LLVM 22). Never symlink or delete that LLVM tree.
+- Submodules are needed for running tinygo (`git submodule update --init`). Don't symlink `src/net`, the GOROOT overlay treats a symlinked dir as a file and fails with "file exists".
+
+## Status (2026-11-19)
+
+Go `go1.28-devel_3ec8deacc2`, tinygo `origin/dev` @ `0111f7d1`, LLVM 22.1.4 (byollvm).
+The loader fix (commit 2) is merged upstream as `5869d2c4` (#6385), so the rebase dropped it.
+
+| Check | Result |
+|---|---|
+| `make tinygo` with go1.28 | OK |
+| `tinygo run hello.go` (host) | OK |
+| `tinygo run -target=cortex-m-qemu` | OK |
+| `tinygo run -target=riscv-qemu` | OK |
+| `tinygo build -target=wasip1` | OK |
 
 ## Status (2026-11-17)
 
@@ -56,7 +65,8 @@ issues.
 
 1. `compileopts: allow go1.28` sets `MaximumGoMinorVersion = 28`.
    Without it: `requires go version 1.26 through 1.27, got go1.28`.
-2. `loader: list only the PackageJSON fields` adds `loader.PackageJSONFlag()`
+2. Merged upstream as `5869d2c4` (#6385), no longer on this branch.
+   `loader: list only the PackageJSON fields` adds `loader.PackageJSONFlag()`
    (`-json=<fields of PackageJSON>`, built by reflection) and uses it in
    `loader.Load` and `getListOfPackages` in main.go. This is fix option 1
    below. It doesn't depend on go1.28, so it's a good candidate to upstream
@@ -68,7 +78,7 @@ CI workflows (`.github/workflows/*.yml`) still pin `1.27.1`. setup-go can't
 install an unreleased Go, so they're unchanged for now. Switch them once a
 go1.28rc exists.
 
-## Fixed here: `go list -json` now runs cgo (broke every baremetal ARM target)
+## Fixed upstream: `go list -json` now runs cgo (broke every baremetal ARM target)
 
 Upstream TinyGo issue: tinygo-org/tinygo#6357 (milestone 0.46, assigned to
 davecheney).
