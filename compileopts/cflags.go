@@ -1,9 +1,65 @@
 package compileopts
 
 import (
+	"encoding/json"
+	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 )
+
+// CFlags maps a C compiler option to its value, so that a target can override
+// an option it inherits. For "-march=rv32imc" the option is "-march" and the
+// value is "rv32imc". For "-Werror" or "-I/path" the value is empty.
+type CFlags map[string]string
+
+// Set adds a flag, replacing any earlier value for the same option.
+func (f *CFlags) Set(flag string) {
+	if *f == nil {
+		*f = CFlags{}
+	}
+	option, value, _ := strings.Cut(flag, "=")
+	(*f)[option] = value
+}
+
+// Args returns the flags as compiler arguments, sorted by option.
+func (f CFlags) Args() []string {
+	var args []string
+	for _, option := range slices.Sorted(maps.Keys(f)) {
+		if value := f[option]; value != "" {
+			args = append(args, option+"="+value)
+		} else {
+			args = append(args, option)
+		}
+	}
+	return args
+}
+
+// UnmarshalJSON reads the flags from a JSON array of strings.
+func (f *CFlags) UnmarshalJSON(data []byte) error {
+	var flags []string
+	if err := json.Unmarshal(data, &flags); err != nil {
+		return err
+	}
+	*f = make(CFlags, len(flags))
+	for _, flag := range flags {
+		if !strings.HasPrefix(flag, "-") {
+			return fmt.Errorf("cflag %q is not an option, use the -option=value form", flag)
+		}
+		option, _, _ := strings.Cut(flag, "=")
+		if _, ok := (*f)[option]; ok {
+			return fmt.Errorf("duplicate cflag %q", option)
+		}
+		f.Set(flag)
+	}
+	return nil
+}
+
+// MarshalJSON writes the flags as a JSON array of strings.
+func (f CFlags) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.Args())
+}
 
 // FilePrefixMap returns a Clang file-prefix map for two directory paths.
 func FilePrefixMap(from, to string) string {

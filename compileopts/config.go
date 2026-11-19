@@ -356,6 +356,9 @@ func (c *Config) LibraryPath(name string) string {
 	if c.ABI() != "" {
 		archname += "-" + c.ABI()
 	}
+	if march := c.Target.CFlags["-march"]; march != "" {
+		archname += "-" + march
+	}
 	if c.Target.SoftFloat {
 		archname += "-softfloat"
 	}
@@ -409,7 +412,7 @@ func (c *Config) DefaultBinaryExtension() string {
 // preprocessing.
 func (c *Config) CFlags(libclang bool) []string {
 	var cflags []string
-	for _, flag := range c.Target.CFlags {
+	for _, flag := range c.Target.CFlags.Args() {
 		cflags = append(cflags, strings.ReplaceAll(flag, "{root}", goenv.Get("TINYGOROOT")))
 	}
 	resourceDir := goenv.ClangResourceDir(libclang || c.TrimPath())

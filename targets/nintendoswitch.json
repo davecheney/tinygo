@@ -13,7 +13,7 @@
   "relocation-model": "pic",
   "default-stack-size": 2048,
   "cflags": [
-    "-target", "aarch64-unknown-none",
+    "--target=aarch64-unknown-none",
     "-fPIE",
     "-Werror",
     "-fshort-enums",

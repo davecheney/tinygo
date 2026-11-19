@@ -1,7 +1,9 @@
 package compileopts
 
 import (
+	"encoding/json"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -33,5 +35,33 @@ func TestDirectoryPrefixMaps(t *testing.T) {
 				t.Fatalf("prefix map = %q, want %q", tc.got, tc.want)
 			}
 		})
+	}
+}
+
+func TestCFlagsJSON(t *testing.T) {
+	var flags CFlags
+	in := `["-Werror", "-march=rv32imc", "-DFOO=1", "-I{root}/lib/nrfx/mdk"]`
+	if err := json.Unmarshal([]byte(in), &flags); err != nil {
+		t.Fatal(err)
+	}
+	if flags["-march"] != "rv32imc" || flags["-DFOO"] != "1" {
+		t.Errorf("unexpected flags %v", flags)
+	}
+	want := []string{"-DFOO=1", "-I{root}/lib/nrfx/mdk", "-Werror", "-march=rv32imc"}
+	if got := flags.Args(); !slices.Equal(got, want) {
+		t.Errorf("Args() = %v, want %v", got, want)
+	}
+	out, err := json.Marshal(flags)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `["-DFOO=1","-I{root}/lib/nrfx/mdk","-Werror","-march=rv32imc"]`; string(out) != want {
+		t.Errorf("Marshal = %s, want %s", out, want)
+	}
+
+	for _, in := range []string{`["-march=a", "-march=b"]`, `["-target", "aarch64"]`} {
+		if err := json.Unmarshal([]byte(in), &flags); err == nil {
+			t.Errorf("Unmarshal(%s) did not fail", in)
+		}
 	}
 }

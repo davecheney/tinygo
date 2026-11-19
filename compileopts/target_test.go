@@ -57,6 +57,23 @@ func TestLoadTarget_InheritableOnlyTargetStillLoadable(t *testing.T) {
 	}
 }
 
+func TestLoadTarget_MArchOverridesInherited(t *testing.T) {
+	for target, want := range map[string]string{
+		"hifive1b":        "rv32imac",
+		"esp32c3-generic": "rv32imc",
+		"riscv-qemu":      "rv32imaczihintpause",
+		"tkey":            "rv32iczmmul",
+	} {
+		spec, err := LoadTarget(&Options{Target: target})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := spec.CFlags["-march"]; got != want {
+			t.Errorf("target %s: -march=%s, want %s", target, got, want)
+		}
+	}
+}
+
 func TestLoadTarget_FirmwareExtensionsInherited(t *testing.T) {
 	for _, target := range []string{"pico", "pico2"} {
 		t.Run(target, func(t *testing.T) {
@@ -118,7 +135,7 @@ func TestOverrideProperties(t *testing.T) {
 	base := &TargetSpec{
 		GOOS:             "baseGoos",
 		CPU:              "baseCpu",
-		CFlags:           []string{"-base-foo", "-base-bar"},
+		CFlags:           CFlags{"-base-foo": "", "-march": "rv32imac"},
 		BuildTags:        []string{"bt1", "bt2"},
 		DefaultStackSize: 42,
 		AutoStackSize:    &baseAutoStackSize,
@@ -127,7 +144,7 @@ func TestOverrideProperties(t *testing.T) {
 	child := &TargetSpec{
 		GOOS:             "",
 		CPU:              "chlidCpu",
-		CFlags:           []string{"-child-foo", "-child-bar"},
+		CFlags:           CFlags{"-child-foo": "", "-march": "rv32imc"},
 		AutoStackSize:    &childAutoStackSize,
 		DefaultStackSize: 64,
 	}
@@ -140,7 +157,7 @@ func TestOverrideProperties(t *testing.T) {
 	if base.CPU != "chlidCpu" {
 		t.Errorf("Overriding failed : got %v", base.CPU)
 	}
-	if !reflect.DeepEqual(base.CFlags, []string{"-base-foo", "-base-bar", "-child-foo", "-child-bar"}) {
+	if !reflect.DeepEqual(base.CFlags, CFlags{"-base-foo": "", "-child-foo": "", "-march": "rv32imc"}) {
 		t.Errorf("Overriding failed : got %v", base.CFlags)
 	}
 	if !reflect.DeepEqual(base.BuildTags, []string{"bt1", "bt2"}) {

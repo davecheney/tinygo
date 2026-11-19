@@ -44,7 +44,7 @@ type TargetSpec struct {
 	Libc             string   `json:"libc,omitempty"`
 	AutoStackSize    *bool    `json:"automatic-stack-size,omitempty"` // Determine stack size automatically at compile time.
 	DefaultStackSize uint64   `json:"default-stack-size,omitempty"`   // Default stack size if the size couldn't be determined at compile time.
-	CFlags           []string `json:"cflags,omitempty"`
+	CFlags           CFlags   `json:"cflags,omitempty"`
 	LDFlags          []string `json:"ldflags,omitempty"`
 	LinkerScript     string   `json:"linkerscript,omitempty"`
 	ExtraFiles       []string `json:"extra-files,omitempty"`
@@ -104,6 +104,14 @@ func (spec *TargetSpec) overrideProperties(child *TargetSpec) error {
 		case reflect.Pointer: // for pointers, copy if not nil
 			if !src.IsNil() {
 				dst.Set(src)
+			}
+		case reflect.Map: // for maps, child entries replace parent entries with the same key
+			if src.Len() > 0 && dst.IsNil() {
+				dst.Set(reflect.MakeMap(field.Type))
+			}
+			iter := src.MapRange()
+			for iter.Next() {
+				dst.SetMapIndex(iter.Key(), iter.Value())
 			}
 		case reflect.Slice: // for slices, append the field and check for duplicates
 			dst.Set(reflect.AppendSlice(dst, src))
@@ -370,7 +378,8 @@ func defaultTarget(options *Options) (*TargetSpec, error) {
 		spec.Features = "+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87"
 	case "arm":
 		spec.CPU = "generic"
-		spec.CFlags = append(spec.CFlags, "-fno-unwind-tables", "-fno-asynchronous-unwind-tables")
+		spec.CFlags.Set("-fno-unwind-tables")
+		spec.CFlags.Set("-fno-asynchronous-unwind-tables")
 		subarch := strings.Split(options.GOARM, ",")
 		if len(subarch) > 2 {
 			return nil, fmt.Errorf("invalid GOARM=%s, must be of form <num>,[hardfloat|softfloat]", options.GOARM)
@@ -390,13 +399,13 @@ func defaultTarget(options *Options) (*TargetSpec, error) {
 		}
 		switch fpu {
 		case "softfloat":
-			spec.CFlags = append(spec.CFlags, "-msoft-float")
+			spec.CFlags.Set("-msoft-float")
 			spec.SoftFloat = true
 		case "hardfloat":
 			// Hardware floating point support is the default everywhere except
 			// on ARMv5 where it needs to be enabled explicitly.
 			if archLevel == "5" {
-				spec.CFlags = append(spec.CFlags, "-mfpu=vfpv2")
+				spec.CFlags.Set("-mfpu=vfpv2")
 			}
 		default:
 			return nil, fmt.Errorf("invalid extension GOARM=%s, must be softfloat or hardfloat", options.GOARM)
@@ -441,7 +450,7 @@ func defaultTarget(options *Options) (*TargetSpec, error) {
 		}
 	case "mips", "mipsle":
 		spec.CPU = "mips32"
-		spec.CFlags = append(spec.CFlags, "-fno-pic")
+		spec.CFlags.Set("-fno-pic")
 		if options.GOARCH == "mips" {
 			llvmarch = "mips" // big endian
 		} else {
@@ -453,7 +462,7 @@ func defaultTarget(options *Options) (*TargetSpec, error) {
 		case "softfloat":
 			spec.SoftFloat = true
 			spec.Features = "+mips32,+soft-float,-noabicalls"
-			spec.CFlags = append(spec.CFlags, "-msoft-float")
+			spec.CFlags.Set("-msoft-float")
 		default:
 			return nil, fmt.Errorf("invalid GOMIPS=%s: must be hardfloat or softfloat", options.GOMIPS)
 		}
@@ -527,7 +536,7 @@ func defaultTarget(options *Options) (*TargetSpec, error) {
 			// of enabling it in compiler-rt (which is a bit more complicated).
 			// We don't really need this feature anyway as we don't even support
 			// proper threading.
-			spec.CFlags = append(spec.CFlags, "-mno-outline-atomics")
+			spec.CFlags.Set("-mno-outline-atomics")
 		}
 		spec.ExtraFiles = append(spec.ExtraFiles,
 			"src/internal/futex/futex_linux.c",
