@@ -25,6 +25,9 @@ var libPicolibc = Library{
 		flags := []string{
 			"-Werror",
 			"-Wall",
+			// Added in LLVM 24 (llvm/llvm-project#244073).
+			"-Wno-unknown-warning-option",
+			"-Wno-unsequenced-volatile",
 			"-std=gnu11",
 			"-D__TINY_STDIO",
 			"-D_XOPEN_SOURCE=700",

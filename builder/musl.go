@@ -105,6 +105,9 @@ var libMusl = Library{
 			"-Wno-deprecated-non-prototype",
 			"-Wno-format",
 			"-Wno-parentheses",
+			// Added in LLVM 24 (llvm/llvm-project#244073).
+			"-Wno-unknown-warning-option",
+			"-Wno-unsequenced-volatile",
 			"-Qunused-arguments",
 			// Select include dirs. Don't include standard library includes
 			// (that would introduce host dependencies and other complications),
