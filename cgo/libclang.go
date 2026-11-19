@@ -1135,18 +1135,32 @@ func (f *cgoFile) makeASTRecordType(cursor C.GoCXCursor, pos token.Pos) *elabora
 	var bitfieldList []bitfieldInfo
 	inBitfield := false
 	bitfieldNum := 0
+	var layout recordLayout
 	ref := storedRefs.Put(struct {
 		fieldList    *ast.FieldList
 		file         *cgoFile
 		inBitfield   *bool
 		bitfieldNum  *int
 		bitfieldList *[]bitfieldInfo
-	}{fieldList, f, &inBitfield, &bitfieldNum, &bitfieldList})
+		layout       *recordLayout
+	}{fieldList, f, &inBitfield, &bitfieldNum, &bitfieldList, &layout})
 	defer storedRefs.Remove(ref)
 	clang_visitChildren(cursor, C.tinygo_clang_visitor(C.tinygo_clang_struct_visitor), C.CXClientData(ref))
 	renameFieldKeywords(fieldList)
 	switch clang_getCursorKind(cursor) {
 	case C.CXCursor_StructDecl:
+		// Pad the struct to the C size, as Go does, if an attribute such as aligned makes it larger.
+		size := int64(clang_Type_getSizeOf(clang_getCursorType(cursor)))
+		if natural := layout.size(); natural > 0 && size > natural {
+			fieldList.List = append(fieldList.List, &ast.Field{
+				Names: []*ast.Ident{{NamePos: pos, Name: "_"}},
+				Type: &ast.ArrayType{
+					Lbrack: pos,
+					Len:    &ast.BasicLit{ValuePos: pos, Kind: token.INT, Value: strconv.FormatInt(size-natural, 10)},
+					Elt:    &ast.Ident{NamePos: pos, Name: "byte"},
+				},
+			})
+		}
 		return &elaboratedTypeInfo{
 			typeExpr: &ast.StructType{
 				Struct: pos,
@@ -1203,6 +1217,7 @@ func tinygo_clang_struct_visitor(cp, parentp *C.GoCXCursor, client_data C.CXClie
 		inBitfield   *bool
 		bitfieldNum  *int
 		bitfieldList *[]bitfieldInfo
+		layout       *recordLayout
 	})
 	fieldList := passed.fieldList
 	f := passed.file
@@ -1217,6 +1232,10 @@ func tinygo_clang_struct_visitor(cp, parentp *C.GoCXCursor, client_data C.CXClie
 		// Ignore. The next field will be the struct/union itself.
 		return C.CXChildVisit_Continue
 	default:
+		if C.clang_isAttribute(cursorKind) != 0 {
+			// Attributes such as packed are children of the struct, see #6413.
+			return C.CXChildVisit_Continue
+		}
 		cursorKindSpelling := getString(C.clang_getCursorKindSpelling(cursorKind))
 		f.addError(pos, fmt.Sprintf("expected FieldDecl in struct or union, not %s", cursorKindSpelling))
 		return C.CXChildVisit_Continue
@@ -1267,6 +1286,7 @@ func tinygo_clang_struct_visitor(cp, parentp *C.GoCXCursor, client_data C.CXClie
 		return C.CXChildVisit_Continue
 	}
 	*inBitfield = false
+	passed.layout.add(offsetof/8+int64(clang_Type_getSizeOf(typ)), alignOf/8)
 	field.Names = []*ast.Ident{
 		{
 			NamePos: pos,
