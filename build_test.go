@@ -82,6 +82,7 @@ func TestBuild(t *testing.T) {
 		"finalizerinvariants.go",
 		"finalizerlarge.go",
 		"float.go",
+		"gc-goroutine-args.go",
 		"gc-register-root.go",
 		"gc.go",
 		"gcstacks.go",
