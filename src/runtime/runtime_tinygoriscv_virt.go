@@ -1,4 +1,4 @@
-//go:build tinygo.riscv && virt
+//go:build virt
 
 package runtime
 
