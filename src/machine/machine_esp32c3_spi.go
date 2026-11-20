@@ -137,12 +137,6 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 	// configure SPI bus clock
 	spi.Bus.CLOCK.Set(freqToClockDiv(config.Frequency))
 
-	// Default CS to NoPin so that an unset CS field (zero value = GPIO0)
-	// does not accidentally configure GPIO0 as the chip select output.
-	if config.CS == 0 {
-		config.CS = NoPin
-	}
-
 	// configure esp32c3 gpio pin matrix
 	config.SDI.Configure(PinConfig{Mode: PinInput})
 	inFunc(bus.sdiIn).Set(esp.GPIO_FUNC_IN_SEL_CFG_SEL | uint32(config.SDI))

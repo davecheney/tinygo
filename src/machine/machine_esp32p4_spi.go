@@ -96,11 +96,6 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 
 	spi.Bus.SPI_CLOCK.Set(freqToClockDiv(config.Frequency))
 
-	// A zero CS is GPIO0, so treat it as unset.
-	if config.CS == 0 {
-		config.CS = NoPin
-	}
-
 	if config.SDI != NoPin {
 		config.SDI.configure(PinConfig{Mode: PinInput}, bus.sdiIn)
 	}

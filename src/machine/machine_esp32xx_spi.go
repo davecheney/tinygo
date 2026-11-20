@@ -14,5 +14,9 @@ func (spi *SPI) Configure(config SPIConfig) error {
 	if bus.sckOut == 0 {
 		return ErrInvalidSPIBus
 	}
+	// A zero CS is GPIO0, so treat it as unset.
+	if config.CS == 0 {
+		config.CS = NoPin
+	}
 	return spi.configure(config, bus)
 }
