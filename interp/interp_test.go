@@ -11,6 +11,67 @@ import (
 	"tinygo.org/x/go-llvm"
 )
 
+func TestObjectStore(t *testing.T) {
+	var store objectStore
+	store.put(4, object{size: 4})
+	store.put(4, object{size: 40})
+	if store.entry == nil || store.objects != nil {
+		t.Fatal("single-object overwrite promoted store")
+	}
+	for _, index := range []uint32{1, 3, 2} {
+		store.put(index, object{size: index})
+	}
+	for _, index := range []uint32{1, 2, 3, 4} {
+		want := index
+		if index == 4 {
+			want = 40
+		}
+		obj, ok := store.get(index)
+		if !ok || obj.size != want {
+			t.Fatalf("get(%d) = (%v, %t)", index, obj.size, ok)
+		}
+	}
+
+	store.put(2, object{size: 20})
+	obj, ok := store.get(2)
+	if !ok || obj.size != 20 {
+		t.Fatalf("overwritten object = (%v, %t)", obj.size, ok)
+	}
+
+	for index := uint32(5); index < 10; index++ {
+		store.put(index, object{size: index})
+	}
+	if store.objects == nil {
+		t.Fatal("store did not promote to map")
+	}
+	if store.len() != 9 {
+		t.Fatalf("promoted store length = %d", store.len())
+	}
+}
+
+func TestObjectStoreMerge(t *testing.T) {
+	var parent, child objectStore
+	parent.put(1, object{size: 1})
+	parent.put(3, object{size: 3})
+	child.put(2, object{size: 2})
+	child.put(3, object{size: 30})
+	parent.merge(&child)
+
+	got := make(map[uint32]uint32)
+	for index, obj := range parent.all() {
+		got[index] = obj.size
+	}
+	want := map[uint32]uint32{1: 1, 2: 2, 3: 30}
+	if len(got) != len(want) {
+		t.Fatalf("merged length = %d, want %d", len(got), len(want))
+	}
+	for index, size := range want {
+		if got[index] != size {
+			t.Fatalf("merged[%d] = %d, want %d", index, got[index], size)
+		}
+	}
+}
+
 func TestInterp(t *testing.T) {
 	matches, err := filepath.Glob("testdata/*.out.ll")
 	if err != nil {

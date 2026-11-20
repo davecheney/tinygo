@@ -11,6 +11,56 @@ import (
 	"tinygo.org/x/go-llvm"
 )
 
+var benchmarkObjectStore objectStore
+var benchmarkObjectMap map[uint32]object
+
+func BenchmarkObjectStore(b *testing.B) {
+	for _, size := range []int{1, 4, 8, 9} {
+		b.Run(fmt.Sprintf("fill/single/%d", size), func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				var store objectStore
+				for index := range size {
+					store.put(uint32(size-index), object{})
+				}
+				benchmarkObjectStore = store
+			}
+		})
+		b.Run(fmt.Sprintf("fill/map/%d", size), func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				store := make(map[uint32]object)
+				for index := range size {
+					store[uint32(size-index)] = object{}
+				}
+				benchmarkObjectMap = store
+			}
+		})
+		b.Run(fmt.Sprintf("lookup/single/%d", size), func(b *testing.B) {
+			var store objectStore
+			for index := range size {
+				store.put(uint32(index), object{})
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for iteration := 0; iteration < b.N; iteration++ {
+				store.get(uint32(iteration % size))
+			}
+		})
+		b.Run(fmt.Sprintf("lookup/map/%d", size), func(b *testing.B) {
+			store := make(map[uint32]object)
+			for index := range size {
+				store[uint32(index)] = object{}
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for iteration := 0; iteration < b.N; iteration++ {
+				_ = store[uint32(iteration%size)]
+			}
+		})
+	}
+}
+
 // BenchmarkRecoverableErrors runs package initializers that each fail with a
 // recoverable error, in a module with many functions and debug info.
 func BenchmarkRecoverableErrors(b *testing.B) {

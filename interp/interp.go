@@ -158,7 +158,7 @@ func Run(mod llvm.Module, timeout time.Duration, maxLoopIterations, maxHashmapOp
 			}
 			return callErr.materialize()
 		}
-		for index, obj := range mem.objects {
+		for index, obj := range mem.objects.all() {
 			r.objects[index] = obj
 		}
 		llvmutil.ReadFunctionUsageAttributes(initAll).Merge(mem.attributes).Apply(initAll)
@@ -268,7 +268,7 @@ func RunFunc(fn llvm.Value, timeout time.Duration, maxLoopIterations, maxHashmap
 		}
 		return callErr.materialize()
 	}
-	for index, obj := range pkgMem.objects {
+	for index, obj := range pkgMem.objects.all() {
 		r.objects[index] = obj
 	}
 
@@ -329,7 +329,7 @@ func (r *runner) markExternalLoad(llvmValue llvm.Value) error {
 	if err != nil {
 		return err
 	}
-	for index, obj := range mem.objects {
+	for index, obj := range mem.objects.all() {
 		if obj.marked > r.objects[index].marked {
 			r.objects[index].marked = obj.marked
 		}

@@ -18,7 +18,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"math/big"
 	"slices"
@@ -59,6 +58,86 @@ func (obj object) clone() object {
 	return obj
 }
 
+type objectStoreEntry struct {
+	index  uint32
+	object object
+}
+
+// objectStore stores a single-object overlay directly and promotes larger
+// overlays to a map. Single-object overlays are common for nested memory views.
+type objectStore struct {
+	entry   *objectStoreEntry
+	objects map[uint32]object
+}
+
+func (s *objectStore) len() int {
+	if s.objects != nil {
+		return len(s.objects)
+	}
+	if s.entry != nil {
+		return 1
+	}
+	return 0
+}
+
+func (s *objectStore) get(index uint32) (object, bool) {
+	if s.objects != nil {
+		obj, ok := s.objects[index]
+		return obj, ok
+	}
+	if s.entry == nil || s.entry.index != index {
+		return object{}, false
+	}
+	return s.entry.object, true
+}
+
+func (s *objectStore) put(index uint32, obj object) {
+	if s.objects != nil {
+		s.objects[index] = obj
+		return
+	}
+	if s.entry == nil {
+		s.entry = &objectStoreEntry{index: index, object: obj}
+		return
+	}
+	if s.entry.index == index {
+		s.entry.object = obj
+		return
+	}
+	s.objects = make(map[uint32]object, 2)
+	s.objects[s.entry.index] = s.entry.object
+	s.objects[index] = obj
+	s.entry = nil
+}
+
+func (s *objectStore) merge(other *objectStore) {
+	if other.objects != nil {
+		for index, obj := range other.objects {
+			s.put(index, obj)
+		}
+		return
+	}
+	if other.entry != nil {
+		s.put(other.entry.index, other.entry.object)
+	}
+}
+
+func (s *objectStore) all() func(func(uint32, object) bool) {
+	return func(yield func(uint32, object) bool) {
+		if s.objects != nil {
+			for index, obj := range s.objects {
+				if !yield(index, obj) {
+					return
+				}
+			}
+			return
+		}
+		if s.entry != nil {
+			yield(s.entry.index, s.entry.object)
+		}
+	}
+}
+
 // A memoryView is bound to a function activation. Loads are done from this view
 // or a parent view (up to the *runner if it isn't included in a view). Stores
 // copy the object to the current view.
@@ -67,7 +146,7 @@ func (obj object) clone() object {
 type memoryView struct {
 	r          *runner
 	parent     *memoryView
-	objects    map[uint32]object
+	objects    objectStore
 	attributes llvmutil.FunctionUsageAttributes
 
 	// These instructions were added to runtime.initAll while interpreting a
@@ -81,10 +160,7 @@ type memoryView struct {
 // the parent, in which case all changed objects should be included in this
 // memory view.
 func (mv *memoryView) extend(sub memoryView) {
-	if mv.objects == nil && len(sub.objects) != 0 {
-		mv.objects = make(map[uint32]object)
-	}
-	maps.Copy(mv.objects, sub.objects)
+	mv.objects.merge(&sub.objects)
 	mv.instructions = append(mv.instructions, sub.instructions...)
 	mv.attributes = mv.attributes.Merge(sub.attributes)
 }
@@ -139,10 +215,7 @@ func (mv *memoryView) markExternal(llvmValue llvm.Value, mark uint8) error {
 		if obj.marked < mark {
 			obj = obj.clone()
 			obj.marked = mark
-			if mv.objects == nil {
-				mv.objects = make(map[uint32]object)
-			}
-			mv.objects[objectIndex] = obj
+			mv.objects.put(objectIndex, obj)
 			if !llvmValue.IsAGlobalVariable().IsNil() {
 				// Using mark '2' (which means read/write access) because
 				// even from an object that is only read from, the resulting
@@ -275,10 +348,7 @@ func (mv *memoryView) markExternalObject(index uint32) error {
 	// This is a heap object that does not have an LLVM global yet.
 	obj = obj.clone()
 	obj.marked = 2
-	if mv.objects == nil {
-		mv.objects = make(map[uint32]object)
-	}
-	mv.objects[index] = obj
+	mv.objects.put(index, obj)
 	if obj.buffer == nil {
 		return nil
 	}
@@ -305,7 +375,7 @@ func (mv *memoryView) hasExternalStore(v pointerValue) bool {
 // get returns an object that can only be read from, as it may return an object
 // of a parent view.
 func (mv *memoryView) get(index uint32) object {
-	if obj, ok := mv.objects[index]; ok {
+	if obj, ok := mv.objects.get(index); ok {
 		return obj
 	}
 	if mv.parent != nil {
@@ -316,16 +386,13 @@ func (mv *memoryView) get(index uint32) object {
 
 // getWritable returns an object that can be written to.
 func (mv *memoryView) getWritable(index uint32) object {
-	if obj, ok := mv.objects[index]; ok {
+	if obj, ok := mv.objects.get(index); ok {
 		// Object is already in the current memory view, so can be modified.
 		return obj
 	}
 	// Object is not currently in this view. Get it, and clone it for use.
 	obj := mv.get(index).clone()
-	if mv.objects == nil {
-		mv.objects = make(map[uint32]object)
-	}
-	mv.objects[index] = obj
+	mv.objects.put(index, obj)
 	return obj
 }
 
@@ -333,9 +400,6 @@ func (mv *memoryView) getWritable(index uint32) object {
 // only done at the current memory view, so that if this memory view is reverted
 // the object is not changed.
 func (mv *memoryView) put(index uint32, obj object) {
-	if mv.objects == nil {
-		mv.objects = make(map[uint32]object)
-	}
 	if checks && mv.get(index).buffer == nil {
 		panic("writing to external object")
 	}
@@ -345,7 +409,7 @@ func (mv *memoryView) put(index uint32, obj object) {
 	if checks && obj.constant {
 		panic("interp: store to a constant")
 	}
-	mv.objects[index] = obj
+	mv.objects.put(index, obj)
 }
 
 // Load the value behind the given pointer. Returns nil if the pointer points to
@@ -385,7 +449,7 @@ func (mv *memoryView) load(p pointerValue, size uint32) value {
 // store in that view may change its buffer in place.
 func (mv *memoryView) owned(index uint32) bool {
 	for v := mv; v != nil; v = v.parent {
-		if _, ok := v.objects[index]; ok {
+		if _, ok := v.objects.get(index); ok {
 			return true
 		}
 	}
@@ -402,10 +466,7 @@ func (mv *memoryView) store(v value, p pointerValue) bool {
 	}
 	index := p.index()
 	var obj object
-	writable := false
-	if mv.objects != nil {
-		obj, writable = mv.objects[index]
-	}
+	obj, writable := mv.objects.get(index)
 	if !writable {
 		obj = mv.get(index)
 	}
