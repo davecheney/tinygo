@@ -25,5 +25,13 @@ func (spi *SPI) Configure(config SPIConfig) error {
 	if config.CS == 0 {
 		config.CS = NoPin
 	}
-	return spi.configure(config, bus)
+	if err := spi.configure(config, bus); err != nil {
+		return err
+	}
+	// Route the pins through the GPIO matrix. NoPin is skipped.
+	config.SDI.configure(PinConfig{Mode: PinInput}, bus.sdiIn)
+	config.SDO.configure(PinConfig{Mode: PinOutput}, bus.sdoOut)
+	config.SCK.configure(PinConfig{Mode: PinOutput}, bus.sckOut)
+	config.CS.configure(PinConfig{Mode: PinOutput}, bus.csOut)
+	return nil
 }

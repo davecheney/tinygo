@@ -131,18 +131,6 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 	// configure SPI bus clock
 	spi.Bus.CLOCK.Set(freqToClockDiv(config.Frequency))
 
-	// configure esp32c3 gpio pin matrix
-	config.SDI.Configure(PinConfig{Mode: PinInput})
-	inFunc(bus.sdiIn).Set(esp.GPIO_FUNC_IN_SEL_CFG_SEL | uint32(config.SDI))
-	config.SDO.Configure(PinConfig{Mode: PinOutput})
-	config.SDO.outFunc().Set(bus.sdoOut)
-	config.SCK.Configure(PinConfig{Mode: PinOutput})
-	config.SCK.outFunc().Set(bus.sckOut)
-	if config.CS != NoPin {
-		config.CS.Configure(PinConfig{Mode: PinOutput})
-		config.CS.outFunc().Set(bus.csOut)
-	}
-
 	return nil
 }
 

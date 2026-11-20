@@ -90,13 +90,6 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 
 	spi.Bus.SPI_CLOCK.Set(freqToClockDiv(config.Frequency))
 
-	if config.SDI != NoPin {
-		config.SDI.configure(PinConfig{Mode: PinInput}, bus.sdiIn)
-	}
-	config.SDO.configure(PinConfig{Mode: PinOutput}, bus.sdoOut)
-	config.SCK.configure(PinConfig{Mode: PinOutput}, bus.sckOut)
-	config.CS.configure(PinConfig{Mode: PinOutput}, bus.csOut)
-
 	return nil
 }
 
