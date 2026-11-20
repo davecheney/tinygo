@@ -15,7 +15,7 @@ type spiBus struct {
 	sckOut, sdoOut, sdiIn, csOut uint32
 }
 
-// Configure and make the SPI peripheral ready to use.
+// Configure configures the SPI bus for use.
 func (spi *SPI) Configure(config SPIConfig) error {
 	bus := spiBusFor(spi.Bus)
 	if bus.sckOut == 0 {
