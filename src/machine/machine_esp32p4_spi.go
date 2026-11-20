@@ -35,11 +35,21 @@ var (
 	SPI2 = &SPI{esp.SPI2}
 )
 
-func (spi *SPI) configure(config SPIConfig) error {
-	if spi.Bus != esp.SPI2 {
-		return ErrInvalidSPIBus
+func spiBusFor(bus *esp.SPI2_Type) spiBus {
+	switch bus {
+	case esp.SPI2:
+		return spiBus{
+			sckOut: SPI2_CK_PAD_OUT_IDX,
+			sdoOut: SPI2_D_PAD_OUT_IDX,
+			sdiIn:  SPI2_Q_PAD_IN_IDX,
+			csOut:  SPI2_CS_PAD_OUT_IDX,
+		}
+	default:
+		return spiBus{}
 	}
+}
 
+func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 	// Clock and reset sequence from ESP-IDF esp_hal_gpspi/esp32p4/include/hal/spi_ll.h.
 	esp.HP_SYS_CLKRST.SetSOC_CLK_CTRL1_REG_GPSPI2_SYS_CLK_EN(1)
 	esp.HP_SYS_CLKRST.SetSOC_CLK_CTRL2_REG_GPSPI2_APB_CLK_EN(1)
@@ -92,11 +102,11 @@ func (spi *SPI) configure(config SPIConfig) error {
 	}
 
 	if config.SDI != NoPin {
-		config.SDI.configure(PinConfig{Mode: PinInput}, SPI2_Q_PAD_IN_IDX)
+		config.SDI.configure(PinConfig{Mode: PinInput}, bus.sdiIn)
 	}
-	config.SDO.configure(PinConfig{Mode: PinOutput}, SPI2_D_PAD_OUT_IDX)
-	config.SCK.configure(PinConfig{Mode: PinOutput}, SPI2_CK_PAD_OUT_IDX)
-	config.CS.configure(PinConfig{Mode: PinOutput}, SPI2_CS_PAD_OUT_IDX)
+	config.SDO.configure(PinConfig{Mode: PinOutput}, bus.sdoOut)
+	config.SCK.configure(PinConfig{Mode: PinOutput}, bus.sckOut)
+	config.CS.configure(PinConfig{Mode: PinOutput}, bus.csOut)
 
 	return nil
 }

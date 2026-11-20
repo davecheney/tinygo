@@ -53,12 +53,21 @@ var (
 	SPI0 = SPI2
 )
 
-func (spi *SPI) configure(config SPIConfig) error {
-	// right now this is only setup to work for the esp32c3 spi2 bus
-	if spi.Bus != esp.SPI2 {
-		return ErrInvalidSPIBus
+func spiBusFor(bus *esp.SPI2_Type) spiBus {
+	switch bus {
+	case esp.SPI2:
+		return spiBus{
+			sckOut: FSPICLK_OUT_IDX,
+			sdoOut: FSPID_OUT_IDX,
+			sdiIn:  FSPIQ_IN_IDX,
+			csOut:  FSPICS0_OUT_IDX,
+		}
+	default:
+		return spiBus{}
 	}
+}
 
+func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 	// periph module reset
 	esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(1)
 	esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(0)
@@ -136,14 +145,14 @@ func (spi *SPI) configure(config SPIConfig) error {
 
 	// configure esp32c3 gpio pin matrix
 	config.SDI.Configure(PinConfig{Mode: PinInput})
-	inFunc(FSPIQ_IN_IDX).Set(esp.GPIO_FUNC_IN_SEL_CFG_SEL | uint32(config.SDI))
+	inFunc(bus.sdiIn).Set(esp.GPIO_FUNC_IN_SEL_CFG_SEL | uint32(config.SDI))
 	config.SDO.Configure(PinConfig{Mode: PinOutput})
-	config.SDO.outFunc().Set(FSPID_OUT_IDX)
+	config.SDO.outFunc().Set(bus.sdoOut)
 	config.SCK.Configure(PinConfig{Mode: PinOutput})
-	config.SCK.outFunc().Set(FSPICLK_OUT_IDX)
+	config.SCK.outFunc().Set(bus.sckOut)
 	if config.CS != NoPin {
 		config.CS.Configure(PinConfig{Mode: PinOutput})
-		config.CS.outFunc().Set(FSPICS0_OUT_IDX)
+		config.CS.outFunc().Set(bus.csOut)
 	}
 
 	return nil
