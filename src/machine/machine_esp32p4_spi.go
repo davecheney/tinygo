@@ -4,7 +4,6 @@ package machine
 
 import (
 	"device/esp"
-	"errors"
 	"runtime/volatile"
 	"unsafe"
 )
@@ -18,11 +17,6 @@ const (
 	SPI2_Q_PAD_IN_IDX   = 54
 	SPI2_D_PAD_OUT_IDX  = 55
 	SPI2_CS_PAD_OUT_IDX = 62
-)
-
-var (
-	ErrInvalidSPIBus  = errors.New("machine: SPI bus is invalid")
-	ErrInvalidSPIMode = errors.New("machine: SPI mode is invalid")
 )
 
 // SPI is a general purpose SPI controller on the ESP32-P4.

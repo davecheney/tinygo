@@ -10,7 +10,6 @@ package machine
 
 import (
 	"device/esp"
-	"errors"
 	"runtime/volatile"
 	"unsafe"
 )
@@ -35,11 +34,6 @@ const (
 	FSPICS3_OUT_IDX = uint32(71)
 	FSPICS4_OUT_IDX = uint32(72)
 	FSPICS5_OUT_IDX = uint32(73)
-)
-
-var (
-	ErrInvalidSPIBus  = errors.New("machine: SPI bus is invalid")
-	ErrInvalidSPIMode = errors.New("machine: SPI mode is invalid")
 )
 
 // Serial Peripheral Interface on the ESP32-C3.

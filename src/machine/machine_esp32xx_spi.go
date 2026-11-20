@@ -2,6 +2,13 @@
 
 package machine
 
+import "errors"
+
+var (
+	ErrInvalidSPIBus  = errors.New("machine: SPI bus is invalid")
+	ErrInvalidSPIMode = errors.New("machine: SPI mode is invalid")
+)
+
 // spiBus holds the GPIO matrix signals of one SPI bus. spiBusFor gives the
 // zero value for a bus that the chip does not support.
 type spiBus struct {
