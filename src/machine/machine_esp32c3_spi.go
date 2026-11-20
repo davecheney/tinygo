@@ -61,7 +61,7 @@ func spiBusFor(bus *esp.SPI2_Type) spiBus {
 	}
 }
 
-func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
+func (spi *SPI) configure(config SPIConfig, bus spiBus, mode spiMode) error {
 	// periph module reset
 	esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(1)
 	esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(0)
@@ -112,10 +112,6 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 	spi.Bus.SetUSER_DOUTDIN(1)
 
 	// set spi2 data mode
-	mode := spiModeFor(config.Mode)
-	if mode&spiModeValid == 0 {
-		return ErrInvalidSPIMode
-	}
 	spi.Bus.SetMISC_CK_IDLE_EDGE(mode.idleEdge())
 	spi.Bus.SetUSER_CK_OUT_EDGE(mode.outEdge())
 

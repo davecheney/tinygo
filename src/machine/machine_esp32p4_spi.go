@@ -43,7 +43,7 @@ func spiBusFor(bus *esp.SPI2_Type) spiBus {
 	}
 }
 
-func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
+func (spi *SPI) configure(config SPIConfig, bus spiBus, mode spiMode) error {
 	// Clock and reset sequence from ESP-IDF esp_hal_gpspi/esp32p4/include/hal/spi_ll.h.
 	esp.HP_SYS_CLKRST.SetSOC_CLK_CTRL1_REG_GPSPI2_SYS_CLK_EN(1)
 	esp.HP_SYS_CLKRST.SetSOC_CLK_CTRL2_REG_GPSPI2_APB_CLK_EN(1)
@@ -76,10 +76,6 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus) error {
 	spi.Bus.SetSPI_USER_SPI_USR_MISO(1)
 	spi.Bus.SetSPI_USER_SPI_DOUTDIN(1)
 
-	mode := spiModeFor(config.Mode)
-	if mode&spiModeValid == 0 {
-		return ErrInvalidSPIMode
-	}
 	spi.Bus.SetSPI_MISC_SPI_CK_IDLE_EDGE(mode.idleEdge())
 	spi.Bus.SetSPI_USER_SPI_CK_OUT_EDGE(mode.outEdge())
 

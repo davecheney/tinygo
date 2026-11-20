@@ -25,7 +25,11 @@ func (spi *SPI) Configure(config SPIConfig) error {
 	if config.CS == 0 {
 		config.CS = NoPin
 	}
-	if err := spi.configure(config, bus); err != nil {
+	mode := spiModeFor(config.Mode)
+	if mode&spiModeValid == 0 {
+		return ErrInvalidSPIMode
+	}
+	if err := spi.configure(config, bus, mode); err != nil {
 		return err
 	}
 	// Route the pins through the GPIO matrix. NoPin is skipped.
