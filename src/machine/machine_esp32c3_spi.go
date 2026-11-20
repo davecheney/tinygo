@@ -53,8 +53,7 @@ var (
 	SPI0 = SPI2
 )
 
-// Configure and make the SPI peripheral ready to use.
-func (spi *SPI) Configure(config SPIConfig) error {
+func (spi *SPI) configure(config SPIConfig) error {
 	// right now this is only setup to work for the esp32c3 spi2 bus
 	if spi.Bus != esp.SPI2 {
 		return ErrInvalidSPIBus

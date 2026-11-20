@@ -35,8 +35,7 @@ var (
 	SPI2 = &SPI{esp.SPI2}
 )
 
-// Configure and make the SPI peripheral ready to use.
-func (spi *SPI) Configure(config SPIConfig) error {
+func (spi *SPI) configure(config SPIConfig) error {
 	if spi.Bus != esp.SPI2 {
 		return ErrInvalidSPIBus
 	}
