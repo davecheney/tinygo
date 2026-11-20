@@ -120,6 +120,9 @@ func (p Pin) Configure(config PinConfig) {
 
 // configure is the same as Configure, but allows setting a specific GPIO matrix signal.
 func (p Pin) configure(config PinConfig, signal uint32) {
+	if p == NoPin {
+		return
+	}
 	p.Configure(config)
 	if signal == 256 {
 		return
