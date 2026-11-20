@@ -187,6 +187,7 @@ func testNoRuntime(t *testing.T, target, scheduler string, tests []noRuntimeTest
 					options.Opt = opt
 					options.Scheduler = scheduler
 					options.InterpMaxLoopIterations = interp.DefaultMaxInterpBlockEntries
+					options.InterpMaxHashmapOperations = interp.DefaultMaxInterpHashmapOperations
 					config, err := builder.NewConfig(&options)
 					if err != nil {
 						t.Fatal(err)
