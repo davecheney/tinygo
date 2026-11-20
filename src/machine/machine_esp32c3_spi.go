@@ -130,81 +130,19 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus, mode spiMode) error {
 	return nil
 }
 
-// Transfer writes/reads a single byte using the SPI interface. If you need to
-// transfer larger amounts of data, Tx will be faster.
-func (spi *SPI) Transfer(w byte) (byte, error) {
-	spi.Bus.SetMS_DLEN_MS_DATA_BITLEN(7)
-
-	spi.Bus.SetW0(uint32(w))
-
-	// Send/receive byte.
+func (spi *SPI) start() {
 	spi.Bus.SetCMD_UPDATE(1)
 	for spi.Bus.GetCMD_UPDATE() != 0 {
 	}
-
 	spi.Bus.SetCMD_USR(1)
 	for spi.Bus.GetCMD_USR() != 0 {
 	}
-
-	// The received byte is stored in W0.
-	return byte(spi.Bus.GetW0()), nil
 }
 
-// Tx handles read/write operation for SPI interface. Since SPI is a synchronous write/read
-// interface, there must always be the same number of bytes written as bytes read.
-// This is accomplished by sending zero bits if r is bigger than w or discarding
-// the incoming data if w is bigger than r.
-func (spi *SPI) Tx(w, r []byte) error {
-	toTransfer := len(w)
-	if len(r) > toTransfer {
-		toTransfer = len(r)
-	}
+func (spi *SPI) setBitLen(n uint32) {
+	spi.Bus.SetMS_DLEN_MS_DATA_BITLEN(n)
+}
 
-	for toTransfer > 0 {
-		// Chunk 64 bytes at a time.
-		chunkSize := toTransfer
-		if chunkSize > 64 {
-			chunkSize = 64
-		}
-
-		// Fill tx buffer.
-		transferWords := (*[16]volatile.Register32)(unsafe.Pointer(uintptr(unsafe.Pointer(&spi.Bus.W0))))
-		spiTxFillBuffer(transferWords, w)
-
-		// Do the transfer.
-		spi.Bus.SetMS_DLEN_MS_DATA_BITLEN(uint32(chunkSize)*8 - 1)
-
-		spi.Bus.SetCMD_UPDATE(1)
-		for spi.Bus.GetCMD_UPDATE() != 0 {
-		}
-
-		spi.Bus.SetCMD_USR(1)
-		for spi.Bus.GetCMD_USR() != 0 {
-		}
-
-		// Read rx buffer.
-		rxSize := 64
-		if rxSize > len(r) {
-			rxSize = len(r)
-		}
-		for i := 0; i < rxSize; i++ {
-			r[i] = byte(transferWords[i/4].Get() >> ((i % 4) * 8))
-		}
-
-		// Cut off some part of the output buffer so the next iteration we will
-		// only send the remaining bytes.
-		if len(w) < chunkSize {
-			w = nil
-		} else {
-			w = w[chunkSize:]
-		}
-		if len(r) < chunkSize {
-			r = nil
-		} else {
-			r = r[chunkSize:]
-		}
-		toTransfer -= chunkSize
-	}
-
-	return nil
+func (spi *SPI) buffer() *[16]volatile.Register32 {
+	return (*[16]volatile.Register32)(unsafe.Pointer(&spi.Bus.W0))
 }

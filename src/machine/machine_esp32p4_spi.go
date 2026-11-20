@@ -89,37 +89,6 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus, mode spiMode) error {
 	return nil
 }
 
-// Transfer writes and reads a single byte.
-func (spi *SPI) Transfer(w byte) (byte, error) {
-	spi.Bus.SetSPI_MS_DLEN_SPI_MS_DATA_BITLEN(7)
-	spi.Bus.SPI_W0.Set(uint32(w))
-	spi.start()
-	return byte(spi.Bus.SPI_W0.Get()), nil
-}
-
-// Tx writes w and reads into r. The shorter slice is padded with zeros or
-// its extra input is discarded.
-func (spi *SPI) Tx(w, r []byte) error {
-	toTransfer := max(len(w), len(r))
-	buf := (*[16]volatile.Register32)(unsafe.Pointer(&spi.Bus.SPI_W0))
-	for toTransfer > 0 {
-		chunkSize := min(toTransfer, 64)
-		spiTxFillBuffer(buf, w)
-		spi.Bus.SetSPI_MS_DLEN_SPI_MS_DATA_BITLEN(uint32(chunkSize)*8 - 1)
-		spi.start()
-
-		rxSize := min(chunkSize, len(r))
-		for i := 0; i < rxSize; i++ {
-			r[i] = byte(buf[i/4].Get() >> ((i % 4) * 8))
-		}
-
-		w = w[min(chunkSize, len(w)):]
-		r = r[rxSize:]
-		toTransfer -= chunkSize
-	}
-	return nil
-}
-
 func (spi *SPI) start() {
 	spi.Bus.SetSPI_CMD_SPI_UPDATE(1)
 	for spi.Bus.GetSPI_CMD_SPI_UPDATE() != 0 {
@@ -127,4 +96,12 @@ func (spi *SPI) start() {
 	spi.Bus.SetSPI_CMD_SPI_USR(1)
 	for spi.Bus.GetSPI_CMD_SPI_USR() != 0 {
 	}
+}
+
+func (spi *SPI) setBitLen(n uint32) {
+	spi.Bus.SetSPI_MS_DLEN_SPI_MS_DATA_BITLEN(n)
+}
+
+func (spi *SPI) buffer() *[16]volatile.Register32 {
+	return (*[16]volatile.Register32)(unsafe.Pointer(&spi.Bus.SPI_W0))
 }
