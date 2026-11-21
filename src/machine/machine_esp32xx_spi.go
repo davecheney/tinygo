@@ -15,6 +15,9 @@ func (spi *SPI) Configure(config SPIConfig) error {
 	if !ok {
 		return ErrInvalidSPIBus
 	}
+	if config.Frequency == 0 {
+		config.Frequency = 4 * MHz
+	}
 	// A zero CS is GPIO0, so treat it as unset.
 	if config.CS == 0 {
 		config.CS = NoPin
