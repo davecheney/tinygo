@@ -61,15 +61,18 @@ func spiBusFor(bus *esp.SPI2_Type) (spiBus, bool) {
 	}
 }
 
+// enableSPIClock enables and resets the clock of an SPI bus.
+func enableSPIClock(bus *esp.SPI2_Type) {
+	switch bus {
+	case esp.SPI2:
+		esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(1)
+		esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(0)
+		esp.SYSTEM.SetPERIP_CLK_EN0_SPI2_CLK_EN(1)
+		esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(0)
+	}
+}
+
 func (spi *SPI) configure(config SPIConfig, bus spiBus, mode spiMode) error {
-	// periph module reset
-	esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(1)
-	esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(0)
-
-	// periph module enable
-	esp.SYSTEM.SetPERIP_CLK_EN0_SPI2_CLK_EN(1)
-	esp.SYSTEM.SetPERIP_RST_EN0_SPI2_RST(0)
-
 	// init the spi2 bus
 	spi.Bus.SLAVE.Set(0)
 	spi.Bus.MISC.Set(0)

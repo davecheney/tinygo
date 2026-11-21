@@ -23,6 +23,7 @@ func (spi *SPI) Configure(config SPIConfig) error {
 	if mode&spiModeValid == 0 {
 		return ErrInvalidSPIMode
 	}
+	enableSPIClock(spi.Bus)
 	if err := spi.configure(config, bus, mode); err != nil {
 		return err
 	}
