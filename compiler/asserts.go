@@ -262,9 +262,6 @@ func (b *builder) createRuntimeAssert(assert llvm.Value, blockPrefix, assertFunc
 }
 
 func (b *builder) getRuntimeAssertBlock(blockPrefix, assertFunc string) llvm.BasicBlock {
-	if b.runtimeAssertBlocks == nil {
-		b.runtimeAssertBlocks = make(map[string]llvm.BasicBlock)
-	}
 	if block := b.runtimeAssertBlocks[assertFunc]; !block.IsNil() {
 		return block
 	}

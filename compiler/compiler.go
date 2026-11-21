@@ -230,15 +230,16 @@ type builder struct {
 func newBuilder(c *context, irbuilder llvm.Builder, f *ssa.Function) *builder {
 	fnType, fn := c.getFunction(f)
 	return &builder{
-		context:        c,
-		Builder:        irbuilder,
-		fn:             f,
-		llvmFnType:     fnType,
-		llvmFn:         fn,
-		info:           c.getFunctionInfo(f),
-		locals:         make(map[ssa.Value]llvm.Value),
-		indirectValues: make(map[ssa.Value]llvm.Value),
-		dilocals:       make(map[*types.Var]llvm.Metadata),
+		context:             c,
+		Builder:             irbuilder,
+		fn:                  f,
+		llvmFnType:          fnType,
+		llvmFn:              fn,
+		info:                c.getFunctionInfo(f),
+		locals:              make(map[ssa.Value]llvm.Value),
+		indirectValues:      make(map[ssa.Value]llvm.Value),
+		dilocals:            make(map[*types.Var]llvm.Metadata),
+		runtimeAssertBlocks: make(map[string]llvm.BasicBlock),
 	}
 }
 
