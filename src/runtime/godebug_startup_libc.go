@@ -1,4 +1,4 @@
-//go:build (linux && !baremetal && !tinygo.wasm && !nintendoswitch) || darwin || windows
+//go:build tinygo.linux || darwin || windows
 
 package runtime
 

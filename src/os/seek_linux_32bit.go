@@ -1,4 +1,4 @@
-//go:build linux && !baremetal && !tinygo.wasm && (386 || arm)
+//go:build tinygo.linux && (386 || arm)
 
 package os
 

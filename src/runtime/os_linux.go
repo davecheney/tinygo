@@ -1,4 +1,4 @@
-//go:build !baremetal && !nintendoswitch && !wasm_unknown && !wasip2
+//go:build tinygo.linux
 
 package runtime
 

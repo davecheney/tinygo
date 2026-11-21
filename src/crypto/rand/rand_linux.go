@@ -1,4 +1,4 @@
-//go:build !baremetal && !wasip2 && !wasm_unknown && !nintendoswitch
+//go:build tinygo.linux
 
 // This implementation of crypto/rand uses the getrandom libc function to
 // generate random numbers.

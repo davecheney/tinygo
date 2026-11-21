@@ -158,6 +158,12 @@ func (c *Config) BuildTags() []string {
 		tags = append(tags, fmt.Sprintf("go1.%d", i))
 	}
 	tags = append(tags, c.Options.Tags...)
+	// Baremetal, wasip2, wasm-unknown and nintendoswitch also use GOOS linux.
+	if c.GOOS() == "linux" && !slices.ContainsFunc(tags, func(t string) bool {
+		return t == "baremetal" || t == "tinygo.wasm" || t == "nintendoswitch"
+	}) {
+		tags = append(tags, "tinygo.linux")
+	}
 	return tags
 }
 

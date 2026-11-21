@@ -1,4 +1,4 @@
-//go:build !baremetal && !js && !wasip2 && !wasm_unknown && !nintendoswitch
+//go:build tinygo.linux
 
 // Copyright 2020 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style

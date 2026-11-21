@@ -1,4 +1,4 @@
-//go:build scheduler.threads && (darwin || (linux && !baremetal && !tinygo.wasm && !nintendoswitch))
+//go:build scheduler.threads && (darwin || tinygo.linux)
 
 package runtime
 
