@@ -118,13 +118,10 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus, mode spiMode) error {
 	spi.Bus.SetMISC_CK_IDLE_EDGE(mode.idleEdge())
 	spi.Bus.SetUSER_CK_OUT_EDGE(mode.outEdge())
 
-	// set spi2 bit order
+	// CTRL is clear, so the bit order is MSB first unless LSBFirst is set.
 	if config.LSBFirst {
-		spi.Bus.SetCTRL_WR_BIT_ORDER(1) // LSB first
+		spi.Bus.SetCTRL_WR_BIT_ORDER(1)
 		spi.Bus.SetCTRL_RD_BIT_ORDER(1)
-	} else {
-		spi.Bus.SetCTRL_WR_BIT_ORDER(0) // MSB first
-		spi.Bus.SetCTRL_RD_BIT_ORDER(0)
 	}
 
 	// configure SPI bus clock
