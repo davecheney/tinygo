@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"device/esp"
+	"runtime/volatile"
 )
 
 // TIMG0 counts at 40MHz. The 80MHz timer clock is divided by 2.
@@ -98,4 +99,8 @@ func main() {
 
 	// Fallback: if main ever returns, hang the CPU.
 	exit(0)
+}
+
+func timerAlarmMap() *volatile.Register32 {
+	return &esp.INTERRUPT_CORE0.TG0_T0_INTR_MAP
 }

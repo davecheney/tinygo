@@ -8,8 +8,6 @@ import (
 	clic "internal/esp"
 	"machine"
 	"runtime/interrupt"
-	"runtime/volatile"
-	"unsafe"
 )
 
 // TIMG0 runs from APB (80MHz): divider 2 gives 40MHz ticks, 25ns each.
@@ -51,26 +49,8 @@ func init() {
 	checkPSRAM()
 }
 
-// interruptInit initializes the interrupt controller.
-func interruptInit() {
-	riscv.DisableInterrupts()
-	clic.Init()
-
-	// MODE 1 is vectored. The table must be aligned to 256 bytes.
-	riscv.MTVEC.Set(uintptr(unsafe.Pointer(&_vector_table)) | 1)
-
-	// The ROM can leave MSTATUS.MIE clear.
-	riscv.MSTATUS.SetBits(riscv.MSTATUS_MIE)
-}
-
 // CPU interrupt number used for the TIMG0 timer alarm.
 const timerAlarmCPUInterrupt = 9
-
-var interruptPending volatile.Register8
-
-func signalInterrupt() {
-	interruptPending.Set(1)
-}
 
 // initTimerInterrupt routes the TIMG0 timer 0 alarm interrupt to a CPU
 // interrupt and registers a handler.
@@ -96,6 +76,3 @@ func sleepTicks(d timeUnit) {
 	for ticks() < target {
 	}
 }
-
-//go:extern _vector_table
-var _vector_table [0]uintptr
