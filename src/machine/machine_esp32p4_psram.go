@@ -694,13 +694,10 @@ func PSRAMProbe() uint32 {
 	return rd
 }
 
-// PSRAMBase is the CPU virtual address where the runtime maps PSRAM0.
-const PSRAMBase = psramVAddrBase
-
 // initPSRAM performs the AP-Hex PSRAM bring-up: MPLL=320MHz, PSRAM bus=80MHz,
 // x16 hex mode, 2048-byte pages, DLL enabled, then chip mode-register init over
-// MSPI3. It maps the given number of 64KB pages at PSRAMBase. The runtime calls
-// it at boot with the size the target declares.
+// MSPI3. It maps the given number of 64KB pages at psramVAddrBase. The runtime
+// calls it at boot with the size the target declares.
 //
 //go:linkname initPSRAM runtime.machineInitPSRAM
 func initPSRAM(pages uint32) bool {
