@@ -712,15 +712,18 @@ const psramFramebufferPages = (PSRAMFramebufferBytes + psramPageSize - 1) / psra
 // The function is deliberately non-fatal: callers should print an error and
 // stay in the small on-chip framebuffer path if it returns false.
 func InitPSRAM80MHz() bool {
-	if !initPSRAM80MHz(psramFramebufferPages) {
+	if !initPSRAM(psramFramebufferPages) {
 		return false
 	}
 	return PSRAMValidate(psramVAddrBase, PSRAMFramebufferBytes)
 }
 
-// initPSRAM80MHz brings up the PSRAM like InitPSRAM80MHz and maps the given
-// number of 64KB pages at PSRAMBase.
-func initPSRAM80MHz(pages uint32) bool {
+// initPSRAM brings up the PSRAM like InitPSRAM80MHz and maps the given number
+// of 64KB pages at PSRAMBase. The runtime calls it with the size the target
+// declares.
+//
+//go:linkname initPSRAM runtime.machineInitPSRAM
+func initPSRAM(pages uint32) bool {
 	if !EnablePSRAMMPLLFreq(psram80MPLLMHz) {
 		return false
 	}
