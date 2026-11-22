@@ -79,6 +79,11 @@ func (spi *SPI) configure(config SPIConfig, bus spiBus, mode spiMode) error {
 	spi.Bus.SetSPI_MISC_SPI_CK_IDLE_EDGE(mode.idleEdge())
 	spi.Bus.SetSPI_USER_SPI_CK_OUT_EDGE(mode.outEdge())
 
+	// Hold CS for one SPI clock after the last edge, as ESP-IDF spi_bus_add_device
+	// does by default. A hold time of 0 adds no delay. See spi_ll_master_set_cs_hold.
+	spi.Bus.SetSPI_USER_SPI_CS_HOLD(1)
+	spi.Bus.SetSPI_USER1_SPI_CS_HOLD_TIME(1)
+
 	if config.LSBFirst {
 		spi.Bus.SetSPI_CTRL_SPI_WR_BIT_ORDER(1)
 		spi.Bus.SetSPI_CTRL_SPI_RD_BIT_ORDER(1)
