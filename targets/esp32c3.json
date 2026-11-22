@@ -8,6 +8,7 @@
 	"build-tags": [
 		"esp32c3",
 		"esp",
+		"esp.intc",
 		"machine.uart",
 		"machine.spi",
 		"machine.i2c",

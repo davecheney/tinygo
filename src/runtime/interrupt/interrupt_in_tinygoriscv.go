@@ -1,4 +1,4 @@
-//go:build tinygo.riscv && !tkey && !esp32p4
+//go:build tinygo.riscv && !tkey && !esp.intc && !esp.clic
 
 package interrupt
 
