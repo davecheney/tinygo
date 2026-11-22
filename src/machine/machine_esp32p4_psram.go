@@ -394,13 +394,13 @@ func regi2cRead(block, reg uint8) uint8 {
 }
 
 // EnablePSRAMMPLL powers up and programmes the MPLL used as the PSRAM clock
-// source at 400MHz (the 200MHz-bus default).  Prefer EnablePSRAMMPLLFreq for
+// source at 400MHz (the 200MHz-bus default).  Prefer enablePSRAMMPLLFreq for
 // the CrowPanel's 80MHz bus, which needs MPLL=320MHz.
 func EnablePSRAMMPLL() bool {
-	return EnablePSRAMMPLLFreq(400)
+	return enablePSRAMMPLLFreq(400)
 }
 
-// EnablePSRAMMPLLFreq powers up and programmes the MPLL for the requested
+// enablePSRAMMPLLFreq powers up and programmes the MPLL for the requested
 // frequency from the 40MHz XTAL.  ESP-IDF's AP-Hex driver uses 320MHz for an
 // 80MHz PSRAM bus and 400MHz for a 200MHz bus.
 //
@@ -408,7 +408,7 @@ func EnablePSRAMMPLL() bool {
 // powered first: on the P4 this is the internal LDO channel 2 (VO2) at 1.8V
 // (CONFIG_ESP_LDO_CHAN_PSRAM_DOMAIN=2, VOLTAGE=1800mV), plus the 3.3V peripheral
 // rail (LDO4) that feeds the PSRAM I/O on the CrowPanel.
-func EnablePSRAMMPLLFreq(mhz uint32) bool {
+func enablePSRAMMPLLFreq(mhz uint32) bool {
 	if mhz < 20 {
 		return false
 	}
@@ -701,7 +701,7 @@ func PSRAMProbe() uint32 {
 //
 //go:linkname initPSRAM runtime.machineInitPSRAM
 func initPSRAM(pages uint32) bool {
-	if !EnablePSRAMMPLLFreq(psram80MPLLMHz) {
+	if !enablePSRAMMPLLFreq(psram80MPLLMHz) {
 		return false
 	}
 	EnablePSRAMModuleClock()
