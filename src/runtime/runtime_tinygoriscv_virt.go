@@ -4,7 +4,6 @@ package runtime
 
 import (
 	"device/riscv"
-	"internal/task"
 	"runtime/interrupt"
 	"runtime/volatile"
 	"sync/atomic"
@@ -104,8 +103,12 @@ func handleInterrupt() {
 				exitNow(exitCodePlusOne.Load() - 1)
 			}
 			if gcPauseRequest[hartID].Swap(0) != 0 {
-				// The GC needs to run.
+				// The GC needs to run. Only a software interrupt may end the
+				// wfi in gcWaitForSignal.
+				savedMIE := riscv.MIE.Get()
+				riscv.MIE.Set(riscv.MIE_MSIE)
 				gcInterruptHandler(hartID)
+				riscv.MIE.Set(savedMIE)
 			}
 			if exitCodePlusOne.Load() != 0 {
 				exitNow(exitCodePlusOne.Load() - 1)
@@ -148,40 +151,6 @@ var (
 	// State used to signal the next GC phase to each paused hart.
 	gcSignalWait [numCPU]atomic.Uint32
 )
-
-// The GC interrupted this core for the stop-the-world phase.
-// This function handles that, and only returns after the stop-the-world phase
-// ended.
-func gcInterruptHandler(hartID uint32) {
-	// *only* enable the MSIE interrupt
-	savedMIE := riscv.MIE.Get()
-	riscv.MIE.Set(riscv.MIE_MSIE)
-
-	// Let the GC know we're ready.
-	gcScanState.Add(1)
-
-	// Wait until we get a signal to start scanning.
-	gcWaitForSignal(hartID)
-
-	// Scan the stack(s) of this core.
-	scanCurrentStack()
-	if !task.OnSystemStack() {
-		// Mark system stack.
-		markRoots(task.SystemStack(), coreStackTop(hartID))
-	}
-
-	// Signal we've finished scanning.
-	gcScanState.Store(1)
-
-	// Wait until we get a signal that the stop-the-world phase has ended.
-	gcWaitForSignal(hartID)
-
-	// Restore MIE bits.
-	riscv.MIE.Set(savedMIE)
-
-	// Signal we received the signal and are going to exit the interrupt.
-	gcScanState.Add(1)
-}
 
 func gcWaitForSignal(hartID uint32) {
 	for gcSignalWait[hartID].Load() == 0 {
@@ -400,6 +369,9 @@ func spinLoopWait() {
 	// https://github.com/qemu/qemu/blob/v9.2.3/target/riscv/insn_trans/trans_rvi.c.inc#L856
 	riscv.Asm("pause")
 }
+
+// The core running the GC polls, so it needs no wakeup.
+func spinLoopWake() {}
 
 func currentCPU() uint32 {
 	return uint32(riscv.MHARTID.Get())

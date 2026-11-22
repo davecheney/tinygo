@@ -5,7 +5,6 @@ package runtime
 import (
 	"device/arm"
 	"device/rp"
-	"internal/task"
 	"machine"
 	_ "machine/usb/cdc"
 	"runtime/volatile"
@@ -190,40 +189,11 @@ func multicore_fifo_pop_blocking() uint32 {
 // Value used to communicate between the GC core and the other (paused) cores.
 var gcSignalWait volatile.Register8
 
-// The GC interrupted this core for the stop-the-world phase.
-// This function handles that, and only returns after the stop-the-world phase
-// ended.
-func gcInterruptHandler(hartID uint32) {
-	// Let the GC know we're ready.
-	gcScanState.Add(1)
-	arm.Asm("sev")
-
-	// Wait until we get a signal to start scanning.
+func gcWaitForSignal(core uint32) {
 	for gcSignalWait.Get() == 0 {
 		arm.Asm("wfe")
 	}
 	gcSignalWait.Set(0)
-
-	// Scan the stack(s) of this core.
-	scanCurrentStack()
-	if !task.OnSystemStack() {
-		// Mark system stack.
-		markRoots(task.SystemStack(), coreStackTop(hartID))
-	}
-
-	// Signal we've finished scanning.
-	gcScanState.Store(1)
-	arm.Asm("sev")
-
-	// Wait until we get a signal that the stop-the-world phase has ended.
-	for gcSignalWait.Get() == 0 {
-		arm.Asm("wfe")
-	}
-	gcSignalWait.Set(0)
-
-	// Signal we received the signal and are going to exit the interrupt.
-	gcScanState.Add(1)
-	arm.Asm("sev")
 }
 
 // Pause the given core by sending it an interrupt.
@@ -298,6 +268,11 @@ func (l *spinLock) Unlock() {
 // spinloop.
 func spinLoopWait() {
 	arm.Asm("wfe")
+}
+
+// Wake cores waiting in spinLoopWait.
+func spinLoopWake() {
+	arm.Asm("sev")
 }
 
 func waitForEvents() {

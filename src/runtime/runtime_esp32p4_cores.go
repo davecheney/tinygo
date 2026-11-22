@@ -5,7 +5,6 @@ package runtime
 import (
 	"device/esp"
 	"device/riscv"
-	"internal/task"
 	"runtime/interrupt"
 	"sync/atomic"
 	"unsafe"
@@ -44,6 +43,9 @@ func (l *spinLock) Unlock() {
 func spinLoopWait() {
 	riscv.Asm("nop")
 }
+
+// The core running the GC polls, so it needs no wakeup.
+func spinLoopWake() {}
 
 func currentCPU() uint32 {
 	return uint32(riscv.MHARTID.Get())
@@ -214,33 +216,6 @@ func interruptSleepTicksMulticore(wakeup timeUnit) {
 //go:inline
 func sleepWoken(core uint32) bool {
 	return sleepWake[core].Load() != 0
-}
-
-// The GC interrupted this core for the stop-the-world phase.
-// This function handles that, and only returns after the stop-the-world phase
-// ended.
-func gcInterruptHandler(core uint32) {
-	// Let the GC know we're ready.
-	gcScanState.Add(1)
-
-	// Wait until we get a signal to start scanning.
-	gcWaitForSignal(core)
-
-	// Scan the stack(s) of this core.
-	scanCurrentStack()
-	if !task.OnSystemStack() {
-		// Mark system stack.
-		markRoots(task.SystemStack(), coreStackTop(core))
-	}
-
-	// Signal we've finished scanning.
-	gcScanState.Store(1)
-
-	// Wait until we get a signal that the stop-the-world phase has ended.
-	gcWaitForSignal(core)
-
-	// Signal we received the signal and are going to exit the interrupt.
-	gcScanState.Add(1)
 }
 
 func gcWaitForSignal(core uint32) {

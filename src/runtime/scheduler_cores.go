@@ -156,6 +156,36 @@ func schedulerWakeCore(core uint32) {
 	}
 }
 
+// The GC interrupted this core for the stop-the-world phase.
+// This function handles that, and only returns after the stop-the-world phase
+// ended.
+func gcInterruptHandler(core uint32) {
+	// Let the GC know we're ready.
+	gcScanState.Add(1)
+	spinLoopWake()
+
+	// Wait until we get a signal to start scanning.
+	gcWaitForSignal(core)
+
+	// Scan the stack(s) of this core.
+	scanCurrentStack()
+	if !task.OnSystemStack() {
+		// Mark system stack.
+		markRoots(task.SystemStack(), coreStackTop(core))
+	}
+
+	// Signal we've finished scanning.
+	gcScanState.Store(1)
+	spinLoopWake()
+
+	// Wait until we get a signal that the stop-the-world phase has ended.
+	gcWaitForSignal(core)
+
+	// Signal we received the signal and are going to exit the interrupt.
+	gcScanState.Add(1)
+	spinLoopWake()
+}
+
 //go:linkname assignCore machine.assignCore
 func assignCore(core int) {
 	if core < 0 || core >= numCPU {
