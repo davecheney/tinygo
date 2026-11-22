@@ -131,14 +131,14 @@ func psramMSPI() *esp.SPI0_Type {
 	return (*esp.SPI0_Type)(unsafe.Pointer(uintptr(psramMspiSystemBase)))
 }
 
-// EnablePSRAMModuleClock gates on the PSRAM MSPI functional clocks and releases
+// enablePSRAMModuleClock gates on the PSRAM MSPI functional clocks and releases
 // the dual-MSPI reset, then selects the PSRAM clock source and sets the core
 // clock divider.  This mirrors ESP-IDF psram_ctrlr_ll_enable_module_clock /
 // _reset_module_clock / _select_clk_source / _set_core_clock_div.
 //
 // Step 1 of the PSRAM bring-up.  After calling this the PSRAM MSPI controller
 // registers are readable and the APB/AXI paths out of reset.
-func EnablePSRAMModuleClock() {
+func enablePSRAMModuleClock() {
 	// Gate the PSRAM system APB clock and the PLL/core functional clocks.
 	esp.HP_SYS_CLKRST.SetSOC_CLK_CTRL0_REG_PSRAM_SYS_CLK_EN(1)
 	esp.HP_SYS_CLKRST.SetPERI_CLK_CTRL00_REG_PSRAM_PLL_CLK_EN(1)
@@ -158,32 +158,32 @@ func EnablePSRAMModuleClock() {
 	esp.HP_SYS_CLKRST.SetPERI_CLK_CTRL00_REG_PSRAM_CLK_SRC_SEL(psramClkSrcMPLL)
 }
 
-// SetPSRAMCoreClockDiv sets the PSRAM core-clock divider (freqdiv-1 in the HW
+// setPSRAMCoreClockDiv sets the PSRAM core-clock divider (freqdiv-1 in the HW
 // field, matching ESP-IDF _psram_ctrlr_ll_set_core_clock_div).
-func SetPSRAMCoreClockDiv(freqdiv uint32) {
+func setPSRAMCoreClockDiv(freqdiv uint32) {
 	if freqdiv == 0 {
 		freqdiv = 1
 	}
 	esp.HP_SYS_CLKRST.SetPERI_CLK_CTRL00_REG_PSRAM_CORE_CLK_DIV_NUM(freqdiv - 1)
 }
 
-// PSRAMClockState returns the raw clock source / enable register so bring-up
+// psramClockState returns the raw clock source / enable register so bring-up
 // code can confirm Step 1 took effect on-target.
-func PSRAMClockState() (src, coreEn, pllEn, sysEn uint32) {
+func psramClockState() (src, coreEn, pllEn, sysEn uint32) {
 	return esp.HP_SYS_CLKRST.GetPERI_CLK_CTRL00_REG_PSRAM_CLK_SRC_SEL(),
 		esp.HP_SYS_CLKRST.GetPERI_CLK_CTRL00_REG_PSRAM_CORE_CLK_EN(),
 		esp.HP_SYS_CLKRST.GetPERI_CLK_CTRL00_REG_PSRAM_PLL_CLK_EN(),
 		esp.HP_SYS_CLKRST.GetSOC_CLK_CTRL0_REG_PSRAM_SYS_CLK_EN()
 }
 
-// MapPSRAM maps `pages` (64KB each) of physical PSRAM0 into CPU virtual address
+// mapPSRAM maps `pages` (64KB each) of physical PSRAM0 into CPU virtual address
 // space starting at the given vaddr (which must be 64KB aligned).  For the
 // default region this is vaddr 0x48000000 with a 0-based physical page start.
 // It mirrors ESP-IDF mmu_hal_map_region(mmu_id=1, MMU_TARGET_PSRAM0, ...).
 //
 // Step 3 of the PSRAM bring-up: after the module-clock/reset step this makes
 // the PSRAM readable/writable from Go at the returned base address.
-func MapPSRAM(vaddr, physPageStart uintptr, pages uint32) uintptr {
+func mapPSRAM(vaddr, physPageStart uintptr, pages uint32) uintptr {
 	mmu := psramMSPI()
 	paddrPage := uint32(physPageStart >> 16)
 	for i := uint32(0); i < pages; i++ {
@@ -393,10 +393,10 @@ func regi2cRead(block, reg uint8) uint8 {
 	return uint8(ctrl.Get() >> r2cDataSh)
 }
 
-// EnablePSRAMMPLL powers up and programmes the MPLL used as the PSRAM clock
+// enablePSRAMMPLL powers up and programmes the MPLL used as the PSRAM clock
 // source at 400MHz (the 200MHz-bus default).  Prefer enablePSRAMMPLLFreq for
 // the CrowPanel's 80MHz bus, which needs MPLL=320MHz.
-func EnablePSRAMMPLL() bool {
+func enablePSRAMMPLL() bool {
 	return enablePSRAMMPLLFreq(400)
 }
 
@@ -445,10 +445,10 @@ func enablePSRAMMPLLFreq(mhz uint32) bool {
 	return done
 }
 
-// EnablePSRAMClockSource selects the MPLL source and sets the 80MHz bus clock
+// enablePSRAMClockSource selects the MPLL source and sets the 80MHz bus clock
 // (MPLL 320MHz / freqdiv 4), mirroring ESP-IDF's psram_ctrlr_ll_select_clk_source
 // + set_bus_clock during esp_psram_impl_enable.
-func EnablePSRAMClockSource() {
+func enablePSRAMClockSource() {
 	esp.HP_SYS_CLKRST.SetPERI_CLK_CTRL00_REG_PSRAM_CLK_SRC_SEL(psramClkSrcMPLL)
 	psramSetBusClock(psramMspiSystemBase, psram80Div)
 	psramSetBusClock(psramMspiPeriBase, psram80Div)
@@ -500,11 +500,11 @@ const (
 	psram80Div     = psram80MPLLMHz / psram80BusMHz
 )
 
-// ConfigurePSRAMController programmes the PSRAM system MSPI (SPIMEM2) for the
+// configurePSRAMController programmes the PSRAM system MSPI (SPIMEM2) for the
 // AP-Hex octal-DDR device: sync read/write command codes, 32-bit address depth,
 // read/write dummy cycles (200MHz: rd 26, wr 12), DDR mode, octal line mode, and
 // AXI access with read/write splicing.  Mirrors ESP-IDF s_config_mspi_for_psram.
-func ConfigurePSRAMController() {
+func configurePSRAMController() {
 	m := psramMSPI()
 
 	// Write cmd: 0x8080, 16-bit (value set is an RMW on bits [15:0]).
@@ -552,10 +552,10 @@ func ConfigurePSRAMController() {
 	m.SetSPI_MEM_CTRL1_SPI_MEM_AR_SPLICE_EN(1)
 }
 
-// ConfigurePSRAMTiming applies the pre-chip CS timing, split transaction, page
+// configurePSRAMTiming applies the pre-chip CS timing, split transaction, page
 // size, bus clock (MPLL/4 = 80MHz) and DLL enable on both MSPI controllers,
 // mirroring the lead-in portion of esp_psram_impl_enable.
-func ConfigurePSRAMTiming() {
+func configurePSRAMTiming() {
 	m := psramMSPI()
 	// CS timing (s_set_psram_cs_timing).
 	m.SetSPI_SMEM_AC_SPI_SMEM_CS_SETUP(1)
@@ -630,12 +630,12 @@ func psramReg(base uintptr, off uintptr) *volatile.Register32 {
 	return (*volatile.Register32)(unsafe.Pointer(base + off))
 }
 
-// InitAPHexPSRAM performs the AP-Hex PSRAM chip init: programs MR0/MR4/MR8 mode
+// initAPHexPSRAM performs the AP-Hex PSRAM chip init: programs MR0/MR4/MR8 mode
 // registers (fixed read/write latency, drive strength, burst length, x16 mode)
 // over the peripheral controller (MSPI3) and confirms the part is connected by
 // a write/read-back of a reference pattern.  Mirrors ESP-IDF
 // s_init_psram_mode_reg + s_check_psram_connected.
-func InitAPHexPSRAM(mspi3Base uintptr) bool {
+func initAPHexPSRAM(mspi3Base uintptr) bool {
 	// MR0: lt=1 (fixed latency), read_latency=2, drive_str=0 @80MHz.
 	// mr0 bits: drive_str[1:0], read_latency[4:2], lt[5], rsvd6[6], tso[7].
 	// Read MR0+MR1 (addr 0x0): low byte = MR0, high byte = MR1.
@@ -677,14 +677,14 @@ func psramDataWord(base uintptr, w uint32) {
 	u.SPI_MEM_W0.Set(w)
 }
 
-// PSRAMProbe exercises the PSRAM through the SYSTEM controller (MSPI2) with a
+// psramProbe exercises the PSRAM through the SYSTEM controller (MSPI2) with a
 // bounded user-command write/read round-trip and returns the read-back value.
 // Unlike a raw CPU access (which stalls forever on a non-responsive part), this
 // is non-hanging: it returns 0 on failure so the bring-up can report instead of
 // wedging.  Used for on-target bring-up checks before the CPU/MMU path is
 // trusted, and it maps page 0 so the CPU path is also primed.
-func PSRAMProbe() uint32 {
-	MapPSRAM(psramVAddrBase, 0, 1)
+func psramProbe() uint32 {
+	mapPSRAM(psramVAddrBase, 0, 1)
 	psramDataWord(psramMspiSystemBase, apHexRefData)
 	psramUserCommand(psramMspiSystemBase, apHexSyncWrite, 0x0, 32, apHexWrDummy, 32, 0)
 	rd := psramUserCommand(psramMspiSystemBase, apHexSyncRead, 0x0, 32, apHexRdDummy, 0, 32)
@@ -704,19 +704,19 @@ func initPSRAM(pages uint32) bool {
 	if !enablePSRAMMPLLFreq(psram80MPLLMHz) {
 		return false
 	}
-	EnablePSRAMModuleClock()
-	ConfigPSRAMPinIO(2)
-	ConfigurePSRAMTiming()
+	enablePSRAMModuleClock()
+	configPSRAMPinIO(2)
+	configurePSRAMTiming()
 
 	// Configure the chip itself through the peripheral controller (MSPI3).
-	if !InitAPHexPSRAM(psramMspiPeriBase) {
+	if !initAPHexPSRAM(psramMspiPeriBase) {
 		return false
 	}
 
 	// Now configure the system controller (MSPI2) for cache/AXI access and map
 	// the physical pages into the CPU data address space.
-	ConfigurePSRAMController()
-	MapPSRAM(psramVAddrBase, 0, pages)
+	configurePSRAMController()
+	mapPSRAM(psramVAddrBase, 0, pages)
 	return true
 }
 
@@ -749,10 +749,10 @@ func psramPinReg(off uint32) *volatile.Register32 {
 	return (*volatile.Register32)(unsafe.Pointer(uintptr(iomuxMspiPinBase + off)))
 }
 
-// ConfigPSRAMPinIO sets every PSRAM IOMUX pad drive strength (drv, matches
+// configPSRAMPinIO sets every PSRAM IOMUX pad drive strength (drv, matches
 // ESP-IDF mspi_timing_ll_pin_drv_set(drv=2)) and powers up the DQS pads
 // (mspi_timing_ll_enable_dqs(true)).
-func ConfigPSRAMPinIO(drv uint8) {
+func configPSRAMPinIO(drv uint8) {
 	for _, off := range psramPinOffsets {
 		reg := psramPinReg(off)
 		if off == 0x3c || off == 0x68 { // DQS_0 / DQS_1: drive at bit 15 + XPD
@@ -764,18 +764,18 @@ func ConfigPSRAMPinIO(drv uint8) {
 	}
 }
 
-// SetPSRAMDQSPhase sets the DQS phase field of both DQS pads (used by timing
+// setPSRAMDQSPhase sets the DQS phase field of both DQS pads (used by timing
 // tuning).  phase maps 0..3 to {67.5,78.75,90,101.25} degrees.
-func SetPSRAMDQSPhase(phase uint8) {
+func setPSRAMDQSPhase(phase uint8) {
 	psramPinReg(0x3c).ReplaceBits(uint32(phase), 0x3<<psramDqsPhaseSh, psramDqsPhaseSh)
 	psramPinReg(0x68).ReplaceBits(uint32(phase), 0x3<<psramDqsPhaseSh, psramDqsPhaseSh)
 }
 
-// SetPSRAMDelayline sets the per-pin delayline for the given pin index
+// setPSRAMDelayline sets the per-pin delayline for the given pin index
 // (0..MSPI_LL_PIN_MAX, enum as in mspi_ll.h: D=0,Q=1,WP,HD,D4..D7=7,DQS0=8,
 // CLK=9,CS=10,D8..D15=17,DQS1=18).  DQS pins use the dqs delay_90/270 fields;
 // others use the per-pin delayline field.
-func SetPSRAMDelayline(pin uint8, delayline uint8) {
+func setPSRAMDelayline(pin uint8, delayline uint8) {
 	dlr := psramDelaylineReg(pin)
 	if dlr == nil {
 		return
@@ -812,12 +812,12 @@ func psramDelaylineReg(pin uint8) *volatile.Register32 {
 	return psramPinReg(off)
 }
 
-// TunePSRAM applies a deterministic timing baseline (Step 2c-2 first cut):
+// tunePSRAM applies a deterministic timing baseline (Step 2c-2 first cut):
 // DQS phase and per-pin delaylines are zeroed, which is the low-speed/starting
 // point the DQS sweep tunes from; a full runtime sweep can be layered on later.
-func TunePSRAM() {
-	SetPSRAMDQSPhase(0)
+func tunePSRAM() {
+	setPSRAMDQSPhase(0)
 	for p := uint8(0); p < 19; p++ {
-		SetPSRAMDelayline(p, 0)
+		setPSRAMDelayline(p, 0)
 	}
 }
