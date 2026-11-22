@@ -1,4 +1,4 @@
-//go:build esp32c3 || esp32c6 || esp32h2 || esp32p4
+//go:build esp32c3 || esp32c6 || esp32h2 || esp32p4 || esp32s3
 
 package machine
 
@@ -97,8 +97,7 @@ func (uart *UART) configureInterrupt(intrMapReg *volatile.Register32) {
 	intrMapReg.Set(cpuInterruptFromUART)
 	onceUart.Do(func() {
 		_ = interrupt.New(cpuInterruptFromUART, func(i interrupt.Interrupt) {
-			UART0.serveInterrupt(0)
-			UART1.serveInterrupt(1)
+			serveUARTInterrupts()
 		}).Enable()
 	})
 }

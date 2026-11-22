@@ -412,6 +412,12 @@ func (uart *UART) SetBaudRate(baudRate uint32) {
 
 func uartEnableTX(pin Pin) {}
 
+// serveUARTInterrupts serves the UARTs that share cpuInterruptFromUART.
+func serveUARTInterrupts() {
+	UART0.serveInterrupt(0)
+	UART1.serveInterrupt(1)
+}
+
 func uartSetTXFIFORST(bus *esp.UART_Type, value uint32) {
 	bus.SetCONF0_TXFIFO_RST(value)
 }
