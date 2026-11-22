@@ -694,33 +694,13 @@ func PSRAMProbe() uint32 {
 	return rd
 }
 
-// PSRAMBase is the CPU virtual address where InitPSRAM80MHz maps PSRAM0.
+// PSRAMBase is the CPU virtual address where the runtime maps PSRAM0.
 const PSRAMBase = psramVAddrBase
 
-// PSRAMFramebufferBytes is the size of one full 1024x600 RGB565 frame.
-const PSRAMFramebufferBytes = 1024 * 600 * 2
-
-// psramFramebufferPages is the number of 64KB MMU pages needed for one frame.
-const psramFramebufferPages = (PSRAMFramebufferBytes + psramPageSize - 1) / psramPageSize
-
-// InitPSRAM80MHz performs the full AP-Hex PSRAM bring-up used by the working
-// CrowPanel V1.2 example: MPLL=320MHz, PSRAM bus=80MHz, x16 hex mode,
-// 2048-byte pages, DLL enabled, then chip mode-register init over MSPI3.
-// On success it maps enough pages at PSRAMBase for one full 1024x600 RGB565
-// framebuffer and validates a 1MB CPU write/read-back through the cache.
-//
-// The function is deliberately non-fatal: callers should print an error and
-// stay in the small on-chip framebuffer path if it returns false.
-func InitPSRAM80MHz() bool {
-	if !initPSRAM(psramFramebufferPages) {
-		return false
-	}
-	return PSRAMValidate(psramVAddrBase, PSRAMFramebufferBytes)
-}
-
-// initPSRAM brings up the PSRAM like InitPSRAM80MHz and maps the given number
-// of 64KB pages at PSRAMBase. The runtime calls it with the size the target
-// declares.
+// initPSRAM performs the AP-Hex PSRAM bring-up: MPLL=320MHz, PSRAM bus=80MHz,
+// x16 hex mode, 2048-byte pages, DLL enabled, then chip mode-register init over
+// MSPI3. It maps the given number of 64KB pages at PSRAMBase. The runtime calls
+// it at boot with the size the target declares.
 //
 //go:linkname initPSRAM runtime.machineInitPSRAM
 func initPSRAM(pages uint32) bool {
@@ -740,31 +720,6 @@ func initPSRAM(pages uint32) bool {
 	// the physical pages into the CPU data address space.
 	ConfigurePSRAMController()
 	MapPSRAM(psramVAddrBase, 0, pages)
-	return true
-}
-
-// PSRAMValidate writes a position-dependent pattern through the cacheable PSRAM
-// mapping, writes the dirty lines back, invalidates them, and reads the pattern
-// again from the device.  This distinguishes a real PSRAM path from a cache hit
-// on stale data.  It is bounded to one framebuffer (1.2MB).
-func PSRAMValidate(addr uintptr, size uintptr) bool {
-	const patternSeed = 0xA5C30000
-	words := int(size / 4)
-
-	for i := 0; i < words; i++ {
-		v := uint32(patternSeed) ^ uint32(i)*0x9E3779B1
-		(*volatile.Register32)(unsafe.Pointer(addr + uintptr(i)*4)).Set(v)
-	}
-	CacheWriteBack(addr, size)
-	CacheInvalidate(addr, size)
-
-	for i := 0; i < words; i++ {
-		want := uint32(patternSeed) ^ uint32(i)*0x9E3779B1
-		got := (*volatile.Register32)(unsafe.Pointer(addr + uintptr(i)*4)).Get()
-		if got != want {
-			return false
-		}
-	}
 	return true
 }
 
