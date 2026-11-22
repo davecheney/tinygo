@@ -706,9 +706,8 @@ const psramFramebufferPages = (PSRAMFramebufferBytes + psramPageSize - 1) / psra
 //go:extern _psram_end
 var _psram_end [0]byte
 
-// psramMappedPages returns the number of 64KB MMU pages in the linker-defined
-// PSRAM window. The P4 linker script provides a 32MB default, which a target
-// may override with psram-size.
+// psramMappedPages returns the number of 64KB MMU pages in the __psram_size
+// bytes the target declares.
 func psramMappedPages() uint32 {
 	end := uintptr(unsafe.Pointer(&_psram_end))
 	if end <= PSRAMBase {
