@@ -5,7 +5,6 @@ package runtime
 import (
 	"device/riscv"
 	"internal/task"
-	"math/bits"
 	"runtime/interrupt"
 	"runtime/volatile"
 	"sync/atomic"
@@ -425,79 +424,11 @@ func startSecondaryCores() {
 	}
 }
 
-// Bitset of harts that are currently sleeping in schedulerUnlockAndWait.
-// This supports up to 8 harts.
-// This variable may only be accessed with the scheduler lock held.
-var sleepingHarts uint8
-
 // Checkpoints for cores waiting for runnable tasks.
 var schedulerWaitCheckpoints [numCPU]interrupt.Checkpoint
 
 // State used to distinguish scheduler wakeups from other software interrupts.
 var schedulerWakePending [numCPU]atomic.Uint32
-
-// Put the scheduler to sleep, since there are no tasks to run.
-// This will unlock the scheduler lock, and must be called with the scheduler
-// lock held.
-func schedulerUnlockAndWait() {
-	hartID := currentCPU()
-
-	// Mark the current hart as sleeping.
-	sleepingHarts |= uint8(1 << hartID)
-
-	// If this is the last core awake and is going to sleep, the scheduler is
-	// deadlocked.
-	// We can do this check since this is not baremetal: there won't be any
-	// external interrupts that might unblock a goroutine.
-	if sleepingHarts == (1<<numCPU)-1 {
-		runtimeFatal("all cores are sleeping - deadlock!")
-	}
-
-	// Need to disable interrupts while saving the checkpoint, otherwise if the
-	// software interrupt happens earlier for another reason (e.g. a GC cycle)
-	// it will see an incomplete checkpoint and the schedulerLock might not be
-	// unlocked yet. That will lead to an invalid state.
-	riscv.MSTATUS.ClearBits(riscv.MSTATUS_MIE)
-	if schedulerWaitCheckpoints[hartID].Save() {
-		schedulerLock.Unlock()
-		riscv.MSTATUS.SetBits(riscv.MSTATUS_MIE)
-
-		// Wait until we get awoken :)
-		for {
-			riscv.Asm("wfi")
-		}
-	}
-
-	// We got awoken again. We need to lock the scheduler again before
-	// returning.
-	schedulerLock.Lock()
-}
-
-// Wake another core, if one is sleeping. Must be called with the scheduler lock
-// held.
-func schedulerWake() {
-	// Look up the lowest-numbered hart that is sleeping.
-	// Returns 8 if there are no sleeping harts.
-	hart := bits.TrailingZeros8(sleepingHarts)
-
-	if hart < 8 {
-		// There is a sleeping hart. Wake it.
-		schedulerWakeCore(uint32(hart))
-	}
-}
-
-// Wake the given core if it is sleeping. Must be called with the scheduler lock
-// held.
-func schedulerWakeCore(hart uint32) {
-	if sleepingHarts&(1<<hart) != 0 {
-		// Clear the sleeping bit before sending the wakeup.
-		sleepingHarts &^= 1 << hart
-		schedulerWakePending[hart].Store(1)
-		signalHart(hart)
-	} else if uint32(sleepingCore) == hart {
-		interruptSleepTicksMulticore(0)
-	}
-}
 
 // Pause the given core by sending it an interrupt.
 func gcPauseCore(core uint32) {
