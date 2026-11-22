@@ -5,6 +5,7 @@ package runtime
 import (
 	"device/esp"
 	"device/riscv"
+	intc "internal/esp"
 	"machine"
 	"runtime/interrupt"
 	"runtime/volatile"
@@ -83,15 +84,7 @@ func init() {
 func interruptInit() {
 	mie := riscv.DisableInterrupts()
 
-	// Reset all interrupt source priorities to zero.
-	priReg := &esp.INTERRUPT_CORE0.CPU_INT_PRI_1
-	for i := 0; i < 31; i++ {
-		priReg.Set(0)
-		priReg = (*volatile.Register32)(unsafe.Add(unsafe.Pointer(priReg), 4))
-	}
-
-	// default threshold for interrupts is 5
-	esp.INTERRUPT_CORE0.CPU_INT_THRESH.Set(5)
+	intc.Init()
 
 	// Set the interrupt address.
 	// Set MODE field to 1 - a vector base address (only supported by ESP32C3)
@@ -131,8 +124,7 @@ func initTimerInterrupt() {
 	timerAlarmInterrupt.Enable()
 
 	// Raise the priority above the default that Enable sets for peripherals.
-	priReg := (*volatile.Register32)(unsafe.Add(unsafe.Pointer(&esp.INTERRUPT_CORE0.CPU_INT_PRI_0), timerAlarmCPUInterrupt*4))
-	priReg.Set(10)
+	intc.SetPriority(timerAlarmCPUInterrupt, 10)
 }
 
 // sleepTicks spins until the given number of ticks have elapsed, using the

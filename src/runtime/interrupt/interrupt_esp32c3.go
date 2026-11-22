@@ -3,11 +3,9 @@
 package interrupt
 
 import (
-	"device/esp"
 	"device/riscv"
 	"errors"
-	"runtime/volatile"
-	"unsafe"
+	intc "internal/esp"
 )
 
 //go:extern tinygo_saved_ra
@@ -28,22 +26,7 @@ func (i Interrupt) Enable() error {
 		return errors.New("interrupt for ESP32-C3 must be in range of 1 through 31")
 	}
 	mask := riscv.DisableInterrupts()
-
-	// enable CPU interrupt number i.num
-	esp.INTERRUPT_CORE0.CPU_INT_ENABLE.SetBits(1 << i.num)
-
-	// Set pulse interrupt type (rising edge detection)
-	esp.INTERRUPT_CORE0.CPU_INT_TYPE.SetBits(1 << i.num)
-
-	// Set default threshold to defaultThreshold
-	reg := (*volatile.Register32)(unsafe.Add(unsafe.Pointer(&esp.INTERRUPT_CORE0.CPU_INT_PRI_0), i.num*4))
-	reg.Set(defaultThreshold)
-
-	// Reset interrupt before reenabling
-	esp.INTERRUPT_CORE0.CPU_INT_CLEAR.SetBits(1 << i.num)
-	esp.INTERRUPT_CORE0.CPU_INT_CLEAR.ClearBits(1 << i.num)
-
-	// we must wait for any pending write operations to complete
+	intc.Enable(uint32(i.num), defaultThreshold)
 	riscv.Asm("fence")
 	riscv.EnableInterrupts(mask)
 	return nil
@@ -175,30 +158,19 @@ func callHandler(n int) {
 func handleInterrupt() {
 	mcause := riscv.MCAUSE.Get()
 	exception := mcause&(1<<31) == 0
-	interruptNumber := uint32(mcause & 0x1f)
+	interruptNumber, ok := intc.Line(mcause)
 
-	if !exception && interruptNumber > 0 {
-		// save MSTATUS & MEPC, which could be overwritten by another CPU interrupt
+	if !exception && ok {
+		// Save MSTATUS & MEPC, which could be overwritten by another CPU interrupt.
 		mstatus := riscv.MSTATUS.Get()
 		mepc := riscv.MEPC.Get()
-		// Using threshold to temporary disable this interrupts.
-		// FYI: using CPU interrupt enable bit make runtime to loose interrupts.
-		reg := (*volatile.Register32)(unsafe.Add(unsafe.Pointer(&esp.INTERRUPT_CORE0.CPU_INT_PRI_0), interruptNumber*4))
-		thresholdSave := reg.Get()
-		reg.Set(disableThreshold)
+
+		// Temporarily disable this interrupt by setting its priority to 0.
+		thresholdSave := intc.Priority(interruptNumber)
+		intc.SetPriority(interruptNumber, disableThreshold)
 		riscv.Asm("fence")
 
-		interruptBit := uint32(1 << interruptNumber)
-
-		// reset pending status interrupt
-		if esp.INTERRUPT_CORE0.CPU_INT_TYPE.Get()&interruptBit != 0 {
-			// this is edge type interrupt
-			esp.INTERRUPT_CORE0.CPU_INT_CLEAR.SetBits(interruptBit)
-			esp.INTERRUPT_CORE0.CPU_INT_CLEAR.ClearBits(interruptBit)
-		} else {
-			// this is level type interrupt
-			esp.INTERRUPT_CORE0.CPU_INT_CLEAR.ClearBits(interruptBit)
-		}
+		intc.Ack(interruptNumber)
 
 		// enable CPU interrupts
 		riscv.MSTATUS.SetBits(riscv.MSTATUS_MIE)
@@ -213,7 +185,7 @@ func handleInterrupt() {
 		riscv.MSTATUS.ClearBits(riscv.MSTATUS_MIE)
 
 		// restore interrupt threshold to enable interrupt again
-		reg.Set(thresholdSave)
+		intc.SetPriority(interruptNumber, thresholdSave)
 		riscv.Asm("fence")
 
 		// Zero MCAUSE so that interrupt.In() returns false once we

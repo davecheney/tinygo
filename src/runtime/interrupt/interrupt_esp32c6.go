@@ -5,29 +5,11 @@ package interrupt
 import (
 	"device/riscv"
 	"errors"
-	"runtime/volatile"
-	"unsafe"
+	plic "internal/esp"
 )
 
 //go:extern tinygo_saved_ra
 var tinygo_saved_ra uintptr
-
-// plicType maps the PLIC (Platform-Level Interrupt Controller) machine-mode
-// registers. The ESP32-C6 and ESP32-H2 use the PLIC, not the INTPRI/INTC
-// block of the ESP32-C3, as the CPU interrupt controller
-// (SOC_INT_PLIC_SUPPORTED).
-// The INTPRI registers at 0x600c5000 are not wired to the CPU.
-type plicType struct {
-	MXINT_ENABLE     volatile.Register32     // 0x00 bit N enables CPU interrupt line N
-	MXINT_TYPE       volatile.Register32     // 0x04 bit N: 1=edge, 0=level
-	MXINT_CLEAR      volatile.Register32     // 0x08 edge acknowledge
-	MXINT_EIP_STATUS volatile.Register32     // 0x0C pending status (read-only)
-	MXINT_PRI        [32]volatile.Register32 // 0x10..0x8C per-line priority (4 bits)
-	MXINT_THRESH     volatile.Register32     // 0x90 priority threshold (8 bits)
-}
-
-// plic points at the PLIC machine-mode register block (DR_REG_PLIC_MX_BASE).
-var plic = (*plicType)(unsafe.Pointer(uintptr(0x20001000)))
 
 // Enable registers a CPU interrupt.
 // The ESP32-C6 and ESP32-H2 have 31 CPU independent interrupts (1..31).
@@ -36,20 +18,7 @@ func (i Interrupt) Enable() error {
 		return errors.New("interrupt must be in range of 1 through 31")
 	}
 	mask := riscv.DisableInterrupts()
-
-	// Enable CPU interrupt number i.num via the PLIC.
-	plic.MXINT_ENABLE.SetBits(1 << i.num)
-
-	// Set pulse interrupt type (rising edge detection).
-	plic.MXINT_TYPE.SetBits(1 << i.num)
-
-	// Set default priority (must be >= threshold to be delivered).
-	plic.MXINT_PRI[i.num].Set(defaultThreshold)
-
-	// Reset interrupt before re-enabling.
-	plic.MXINT_CLEAR.SetBits(1 << i.num)
-	plic.MXINT_CLEAR.ClearBits(1 << i.num)
-
+	plic.Enable(uint32(i.num), defaultThreshold)
 	riscv.Asm("fence")
 	riscv.EnableInterrupts(mask)
 	return nil
@@ -176,29 +145,19 @@ func callHandler(n int) {
 func handleInterrupt() {
 	mcause := riscv.MCAUSE.Get()
 	exception := mcause&(1<<31) == 0
-	interruptNumber := uint32(mcause & 0x1f)
+	interruptNumber, ok := plic.Line(mcause)
 
-	if !exception && interruptNumber > 0 {
+	if !exception && ok {
 		// Save MSTATUS & MEPC, which could be overwritten by another CPU interrupt.
 		mstatus := riscv.MSTATUS.Get()
 		mepc := riscv.MEPC.Get()
-		// Temporarily disable this interrupt by lowering its PLIC priority
-		// below the threshold.
-		thresholdSave := plic.MXINT_PRI[interruptNumber].Get()
-		plic.MXINT_PRI[interruptNumber].Set(disableThreshold)
+
+		// Temporarily disable this interrupt by setting its priority to 0.
+		thresholdSave := plic.Priority(interruptNumber)
+		plic.SetPriority(interruptNumber, disableThreshold)
 		riscv.Asm("fence")
 
-		interruptBit := uint32(1 << interruptNumber)
-
-		// Reset pending status interrupt.
-		if plic.MXINT_TYPE.Get()&interruptBit != 0 {
-			// Edge type interrupt.
-			plic.MXINT_CLEAR.SetBits(interruptBit)
-			plic.MXINT_CLEAR.ClearBits(interruptBit)
-		} else {
-			// Level type interrupt.
-			plic.MXINT_CLEAR.ClearBits(interruptBit)
-		}
+		plic.Ack(interruptNumber)
 
 		// Enable CPU interrupts.
 		riscv.MSTATUS.SetBits(riscv.MSTATUS_MIE)
@@ -213,7 +172,7 @@ func handleInterrupt() {
 		riscv.MSTATUS.ClearBits(riscv.MSTATUS_MIE)
 
 		// Restore interrupt priority to enable interrupt again.
-		plic.MXINT_PRI[interruptNumber].Set(thresholdSave)
+		plic.SetPriority(interruptNumber, thresholdSave)
 		riscv.Asm("fence")
 
 		// Zero MCAUSE so that interrupt.In() returns false once we

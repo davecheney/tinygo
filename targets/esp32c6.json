@@ -7,6 +7,7 @@
 	"build-tags": [
 		"esp32c6",
 		"esp",
+		"esp.plic",
 		"machine.uart",
 		"machine.i2c",
 		"espradio"
