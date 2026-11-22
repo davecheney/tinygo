@@ -125,6 +125,16 @@ func schedulerWakeTask(t *task.Task) {
 // Must only be accessed with the scheduler lock held.
 var waitingCores uint8
 
+// Core sleeping in sleepTicksMulticore, or 0xff.
+// Written with the scheduler lock held. A timer interrupt may read it without the lock.
+var sleepingCore uint8 = 0xff
+
+// Return whether another core is sleeping.
+// May only be called with the scheduler lock held.
+func hasSleepingCore() bool {
+	return sleepingCore != 0xff
+}
+
 // Wake another core, if one is waiting or sleeping. Must be called with the
 // scheduler lock held.
 func schedulerWake() {
