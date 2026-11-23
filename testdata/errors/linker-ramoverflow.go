@@ -1,6 +1,6 @@
 package main
 
-var b [64 << 10]byte // 64kB
+var b [256 << 10]byte // 256kB
 
 func main() {
 	println("ptr:", &b[0])

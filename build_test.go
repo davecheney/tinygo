@@ -731,13 +731,9 @@ func runPlatTests(options compileopts.Options, tests []string, t *testing.T) {
 				continue
 			}
 		}
-		if options.Target == "cortex-m-qemu" && goMinor >= 27 && name == "json.go" {
-			// Go 1.27 jsonv2 exceeds the LM3S6965's 256KiB flash. json.go
-			// is still covered by larger targets such as riscv-qemu.
-			continue
-		}
 		if options.Target == "cortex-m-qemu" && name == "gcstacks.go" {
-			// Too many goroutines for the LM3S6965's RAM.
+			// The stack size analysis misses the direct recursion in panicDeep,
+			// because a local bl has no relocation, so the goroutine overflows.
 			continue
 		}
 		if options.Target == "riscv-qemu" && name == "gcstacks.go" && scheduler == "tasks" {

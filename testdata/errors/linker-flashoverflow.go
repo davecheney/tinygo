@@ -9,9 +9,10 @@ const (
 	d = c + c + c + c + c + c + c + c // 8192 bytes
 	e = d + d + d + d + d + d + d + d // 65536 bytes
 	f = e + e + e + e + e + e + e + e // 524288 bytes
+	g = f + f + f + f + f + f + f + f // 4194304 bytes
 )
 
-var s = f
+var s = g
 
 func main() {
 	println(unsafe.StringData(s))

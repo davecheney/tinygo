@@ -2,7 +2,7 @@
 
 package runtime
 
-// This file implements the Stellaris LM3S6965 Cortex-M3 chip as implemented by
+// This file implements the Arm MPS2 AN385 Cortex-M3 board as implemented by
 // QEMU.
 
 import (
@@ -16,6 +16,7 @@ var timestamp timeUnit
 //export Reset_Handler
 func main() {
 	preinit()
+	initUART()
 	run()
 
 	// Signal successful exit.
@@ -39,11 +40,28 @@ func ticks() timeUnit {
 	return timestamp
 }
 
-// UART0 output register.
-var stdoutWrite = (*volatile.Register8)(unsafe.Pointer(uintptr(0x4000c000)))
+// CMSDK APB UART0, see Arm DDI 0479C section 4.3 and QEMU hw/arm/mps2.c.
+// QEMU hw/char/cmsdk-apb-uart.c loses bytes written while TX is off or full.
+type cmsdkUART struct {
+	data    volatile.Register32
+	state   volatile.Register32
+	ctrl    volatile.Register32
+	intr    volatile.Register32
+	bauddiv volatile.Register32
+}
 
+var uart0 = (*cmsdkUART)(unsafe.Pointer(uintptr(0x40004000)))
+
+func initUART() {
+	uart0.bauddiv.Set(16)
+	uart0.ctrl.Set(1) // TX enable
+}
+
+//go:noinline
 func putchar(c byte) {
-	stdoutWrite.Set(uint8(c))
+	for uart0.state.Get()&1 != 0 { // TX buffer full
+	}
+	uart0.data.Set(uint32(c))
 }
 
 func getchar() byte {
