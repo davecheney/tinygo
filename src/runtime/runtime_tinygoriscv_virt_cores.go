@@ -2,7 +2,10 @@
 
 package runtime
 
-import "device/riscv"
+import (
+	"device/riscv"
+	"unsafe"
+)
 
 // Put the scheduler to sleep, since there are no tasks to run.
 // This will unlock the scheduler lock, and must be called with the scheduler
@@ -45,4 +48,21 @@ func schedulerUnlockAndWait() {
 func schedulerEndWait(hart uint32) {
 	schedulerWakePending[hart].Store(1)
 	signalHart(hart)
+}
+
+//go:extern _stack1_top
+var stack1TopSymbol [0]byte
+
+//go:extern _stack2_top
+var stack2TopSymbol [0]byte
+
+//go:extern _stack3_top
+var stack3TopSymbol [0]byte
+
+// System stack top of each hart, for coreStackTop.
+var coreStackTops = [numCPU]unsafe.Pointer{
+	unsafe.Pointer(&stackTopSymbol),
+	unsafe.Pointer(&stack1TopSymbol),
+	unsafe.Pointer(&stack2TopSymbol),
+	unsafe.Pointer(&stack3TopSymbol),
 }

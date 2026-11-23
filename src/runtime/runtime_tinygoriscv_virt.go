@@ -170,36 +170,6 @@ func gcWaitForSignal(hartID uint32) {
 	riscv.Asm("fence")
 }
 
-//go:extern _stack_top
-var stack0TopSymbol [0]byte
-
-//go:extern _stack1_top
-var stack1TopSymbol [0]byte
-
-//go:extern _stack2_top
-var stack2TopSymbol [0]byte
-
-//go:extern _stack3_top
-var stack3TopSymbol [0]byte
-
-// Returns the stack top (highest address) of the system stack of the given
-// core.
-func coreStackTop(core uint32) uintptr {
-	switch core {
-	case 0:
-		return uintptr(unsafe.Pointer(&stack0TopSymbol))
-	case 1:
-		return uintptr(unsafe.Pointer(&stack1TopSymbol))
-	case 2:
-		return uintptr(unsafe.Pointer(&stack2TopSymbol))
-	case 3:
-		return uintptr(unsafe.Pointer(&stack3TopSymbol))
-	default:
-		runtimeFatal("unexpected core")
-		return 0
-	}
-}
-
 // One tick is 100ns by default in QEMU.
 // (This is not a standard, just the default used by QEMU).
 func ticksToNanoseconds(ticks timeUnit) int64 {

@@ -186,6 +186,12 @@ func gcInterruptHandler(core uint32) {
 	spinLoopWake()
 }
 
+// Returns the stack top (highest address) of the system stack of the given
+// core.
+func coreStackTop(core uint32) uintptr {
+	return uintptr(coreStackTops[core])
+}
+
 //go:linkname assignCore machine.assignCore
 func assignCore(core int) {
 	if core < 0 || core >= numCPU {

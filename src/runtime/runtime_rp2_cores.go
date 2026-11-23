@@ -5,6 +5,7 @@ package runtime
 import (
 	"device/arm"
 	"runtime/volatile"
+	"unsafe"
 )
 
 // Set to 1 by schedulerEndWait to end a wait in schedulerUnlockAndWait.
@@ -31,4 +32,10 @@ func schedulerUnlockAndWait() {
 func schedulerEndWait(core uint32) {
 	volatile.StoreUint32(&schedulerWakePending[core], 1)
 	arm.Asm("sev")
+}
+
+// System stack top of each core, for coreStackTop.
+var coreStackTops = [numCPU]unsafe.Pointer{
+	unsafe.Pointer(&stackTopSymbol),
+	unsafe.Pointer(&stack1TopSymbol),
 }

@@ -291,16 +291,8 @@ func gcSignalCore(core uint32) {
 //go:extern _stack1_top
 var stack1TopSymbol [0]byte
 
-// Returns the stack top (highest address) of the system stack of the given
-// core.
-func coreStackTop(core uint32) uintptr {
-	switch core {
-	case 0:
-		return uintptr(unsafe.Pointer(&stackTopSymbol))
-	case 1:
-		return uintptr(unsafe.Pointer(&stack1TopSymbol))
-	default:
-		runtimeFatal("unexpected core")
-		return 0
-	}
+// System stack top of each core, for coreStackTop.
+var coreStackTops = [numCPU]unsafe.Pointer{
+	unsafe.Pointer(&stackTopSymbol),
+	unsafe.Pointer(&stack1TopSymbol),
 }
