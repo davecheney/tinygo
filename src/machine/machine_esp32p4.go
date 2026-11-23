@@ -312,6 +312,8 @@ func setupPinInterrupt() error {
 	}).Enable()
 }
 
+const numUARTs = 2
+
 var (
 	DefaultUART = UART0
 
@@ -337,6 +339,7 @@ const (
 const uartClockFreq = 40_000_000 // XTAL_CLK, CLK_SRC_SEL 0. See ESP-IDF hal/esp32p4/include/hal/uart_ll.h uart_ll_set_sclk.
 
 type registerSet struct {
+	index            int
 	interruptMapReg  *volatile.Register32
 	gpioMatrixSignal uint32
 }
@@ -352,6 +355,7 @@ func busFor(bus *esp.UART_Type) registerSet {
 		}
 	case esp.UART1:
 		return registerSet{
+			index:            1,
 			interruptMapReg:  &esp.INTERRUPT_CORE0.UART1_INT_MAP,
 			gpioMatrixSignal: uartSignalU1,
 		}
@@ -483,12 +487,6 @@ func uartEnableTX(pin Pin) {
 	} else {
 		esp.GPIO.ENABLE1_W1TS.Set(1 << (pin - 32))
 	}
-}
-
-// serveUARTInterrupts serves the UARTs that share cpuInterruptFromUART.
-func serveUARTInterrupts() {
-	UART0.serveInterrupt(0)
-	UART1.serveInterrupt(1)
 }
 
 func uartSetTXFIFORST(bus *esp.UART_Type, value uint32) {

@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+const numUARTs = 3
+
 var (
 	DefaultUART = UART0
 
@@ -33,6 +35,7 @@ const uartClockFreq = 80_000_000 // APB_CLK, SCLK_SEL 1. See ESP-IDF hal/esp32s3
 const cpuInterruptFromUART = 12
 
 type registerSet struct {
+	index            int
 	interruptMapReg  *volatile.Register32
 	clockReg         *volatile.Register32
 	resetReg         *volatile.Register32
@@ -54,6 +57,7 @@ func busFor(bus *esp.UART_Type) registerSet {
 		}
 	case esp.UART1:
 		return registerSet{
+			index:            1,
 			interruptMapReg:  &esp.INTERRUPT_CORE0.UART1_INTR_MAP,
 			clockReg:         &esp.SYSTEM.PERIP_CLK_EN0,
 			resetReg:         &esp.SYSTEM.PERIP_RST_EN0,
@@ -62,6 +66,7 @@ func busFor(bus *esp.UART_Type) registerSet {
 		}
 	case esp.UART2:
 		return registerSet{
+			index:            2,
 			interruptMapReg:  &esp.INTERRUPT_CORE0.UART2_INTR_MAP,
 			clockReg:         &esp.SYSTEM.PERIP_CLK_EN1,
 			resetReg:         &esp.SYSTEM.PERIP_RST_EN1,
@@ -138,13 +143,6 @@ func (uart *UART) SetBaudRate(baudRate uint32) {
 }
 
 func uartEnableTX(pin Pin) {}
-
-// serveUARTInterrupts serves the UARTs that share cpuInterruptFromUART.
-func serveUARTInterrupts() {
-	UART0.serveInterrupt(0)
-	UART1.serveInterrupt(1)
-	UART2.serveInterrupt(2)
-}
 
 func uartSetTXFIFORST(bus *esp.UART_Type, value uint32) {
 	bus.SetCONF0_TXFIFO_RST(value)

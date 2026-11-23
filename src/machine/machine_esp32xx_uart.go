@@ -30,6 +30,10 @@ const (
 	uart_empty_thresh_default = 10
 )
 
+// uarts holds the configured UARTs. Configure fills it, so a UART that is never
+// configured is not linked in.
+var uarts [numUARTs]*UART
+
 func (uart *UART) Configure(config UARTConfig) error {
 	if config.BaudRate == 0 {
 		config.BaudRate = 115200
@@ -49,6 +53,7 @@ func (uart *UART) Configure(config UARTConfig) error {
 		return err
 	}
 	initUARTClock(uart.Bus, bus)
+	uarts[bus.index] = uart
 	return uart.configure(config, bus)
 }
 
@@ -97,7 +102,9 @@ func (uart *UART) configureInterrupt(intrMapReg *volatile.Register32) {
 	intrMapReg.Set(cpuInterruptFromUART)
 	onceUart.Do(func() {
 		_ = interrupt.New(cpuInterruptFromUART, func(i interrupt.Interrupt) {
-			serveUARTInterrupts()
+			for _, uart := range uarts {
+				uart.serveInterrupt()
+			}
 		}).Enable()
 	})
 }
@@ -119,7 +126,10 @@ func (uart *UART) enableReceiver() {
 	uart.Bus.SetINT_ENA_RXFIFO_OVF_INT_ENA(1)
 }
 
-func (uart *UART) serveInterrupt(num int) {
+func (uart *UART) serveInterrupt() {
+	if uart == nil {
+		return
+	}
 	// get interrupt status
 	interruptFlag := uart.Bus.INT_ST.Get()
 	if (interruptFlag & uartInterrupts) == 0 {
