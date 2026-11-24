@@ -435,16 +435,6 @@ func unlockTimers(mask interrupt.State) {
 	schedulerLock.Unlock()
 }
 
-var systemStack [numCPU]uintptr
-
-// Implementation detail of the internal/task package.
-// It needs to store the system stack pointer somewhere, and needs to know how
-// many cores there are to do so. But it doesn't know the number of cores. Hence
-// why this is implemented in the runtime.
-func systemStackPtr() *uintptr {
-	return &systemStack[currentCPU()]
-}
-
 // Color the 'print' and 'println' output according to the current CPU.
 // This may be helpful for debugging, but should be disabled otherwise.
 const cpuColoredPrint = false

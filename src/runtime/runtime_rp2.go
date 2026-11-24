@@ -18,7 +18,6 @@ const (
 	rp2SIOFIFOCommandFlashSafe
 )
 
-const numCPU = 2
 const numSpinlocks = 32
 
 // machineTicks is provided by package machine.
@@ -54,11 +53,6 @@ func sleepTicks(d timeUnit) {
 	sleepUntil := ticks() + d
 	for ticks() < sleepUntil {
 	}
-}
-
-// Return the current core number: 0 or 1.
-func currentCPU() uint32 {
-	return rp.SIO.CPUID.Get()
 }
 
 // Start the secondary cores for this chip.

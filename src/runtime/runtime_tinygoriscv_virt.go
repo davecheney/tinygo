@@ -13,8 +13,6 @@ import (
 // This file implements the VirtIO RISC-V interface implemented in QEMU, which
 // is an interface designed for emulation.
 
-const numCPU = 4
-
 //export main
 func main() {
 	// Set the interrupt address.
@@ -341,10 +339,6 @@ func spinLoopWait() {
 	// This is a no-op in QEMU TCG (but added here for completeness):
 	// https://github.com/qemu/qemu/blob/v9.2.3/target/riscv/insn_trans/trans_rvi.c.inc#L856
 	riscv.Asm("pause")
-}
-
-func currentCPU() uint32 {
-	return uint32(riscv.MHARTID.Get())
 }
 
 func startSecondaryCores() {
