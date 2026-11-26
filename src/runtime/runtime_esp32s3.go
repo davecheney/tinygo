@@ -135,3 +135,12 @@ var _sbss [0]byte
 
 //go:extern _ebss
 var _ebss [0]byte
+
+// Set (1) or clear (0) the FROM_CPU interrupt of the given core.
+func signalCore(core, value uint32) {
+	if core == 0 {
+		esp.SYSTEM.CPU_INTR_FROM_CPU_0.Set(value)
+	} else {
+		esp.SYSTEM.CPU_INTR_FROM_CPU_1.Set(value)
+	}
+}

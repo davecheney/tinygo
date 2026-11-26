@@ -7,7 +7,6 @@ import (
 	"device/riscv"
 	"internal/task"
 	"runtime/interrupt"
-	"sync/atomic"
 )
 
 // CPU interrupt line for the FROM_CPU software interrupts, on both cores.
@@ -18,15 +17,6 @@ func currentCPU() uint32 {
 }
 
 var crossCoreInterrupt interrupt.Interrupt
-
-// Set (1) or clear (0) the FROM_CPU interrupt of the given core.
-func signalCore(core, value uint32) {
-	if core == 0 {
-		esp.HP_SYS.CPU_INTR_FROM_CPU_0.Set(value)
-	} else {
-		esp.HP_SYS.CPU_INTR_FROM_CPU_1.Set(value)
-	}
-}
 
 func crossCoreHandler(interrupt.Interrupt) {
 	core := currentCPU()
@@ -42,21 +32,6 @@ func crossCoreHandler(interrupt.Interrupt) {
 	}
 	if gcPauseRequest[core].Swap(0) != 0 {
 		gcInterruptHandler(core)
-	}
-}
-
-// CPU interrupt line that core 1 asked core 0 to enable, or 0.
-var core0EnableRequest atomic.Uint32
-
-// Enable a CPU interrupt line on core 0. Called by interrupt.Enable on core 1,
-// which must have interrupts enabled so the GC can still pause it.
-func enableInterruptOnCore0(num uint32) {
-	for !core0EnableRequest.CompareAndSwap(0, num) {
-		spinLoopWait()
-	}
-	signalCore(0, 1)
-	for core0EnableRequest.Load() != 0 {
-		spinLoopWait()
 	}
 }
 

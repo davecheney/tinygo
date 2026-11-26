@@ -115,3 +115,12 @@ func interruptInit() {
 	ps |= 0x20  // set PS.UM (bit 5) — use User exception vector
 	xtensa.EnableInterrupts(ps)
 }
+
+// Set (1) or clear (0) the FROM_CPU interrupt of the given core.
+func signalCore(core, value uint32) {
+	if core == 0 {
+		esp.DPORT.CPU_INTR_FROM_CPU_0.Set(value)
+	} else {
+		esp.DPORT.CPU_INTR_FROM_CPU_1.Set(value)
+	}
+}

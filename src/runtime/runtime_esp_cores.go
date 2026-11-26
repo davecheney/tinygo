@@ -3,7 +3,6 @@
 package runtime
 
 import (
-	"device"
 	"runtime/interrupt"
 	"sync/atomic"
 	"unsafe"
@@ -14,10 +13,6 @@ var (
 	gcPauseRequest [numCPU]atomic.Uint32
 	gcSignalWait   [numCPU]atomic.Uint32
 )
-
-func spinLoopWait() {
-	device.Asm("nop")
-}
 
 var ticksLock spinLock
 

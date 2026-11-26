@@ -164,3 +164,8 @@ func sleepTicks(d timeUnit) {
 
 //go:extern _vector_table
 var _vector_table [0]uintptr
+
+// The esp32c3 has one core, so interrupt.Enable never calls this. It exists for
+// the go:linkname in interrupt_esp_intc.go, which esp32 and esp32s3 share.
+func enableInterruptOnCore0(num uint32) {
+}
