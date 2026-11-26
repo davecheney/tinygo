@@ -46,7 +46,7 @@ MEMORY
      */
     FLASH (rx)  : ORIGIN = 0x40000000, LENGTH = 64M
 
-    /* External PSRAM, mapped at runtime by machine_esp32p4_psram.go.
+    /* External PSRAM, mapped by src/runtime/psram_esp32p4.go.
      * The PSRAM is in the chip package, esp32p4.json sets its size. */
     PSRAM (rw)  : ORIGIN = 0x48000000, LENGTH = DEFINED(__psram_size) ? __psram_size : 0
 }

@@ -3,10 +3,10 @@
 // ESP32-P4 CPLL (CPU PLL) configuration.
 //
 // At ROM boot the CPU runs from the 40 MHz XTAL.  This file provides
-// EnableCPLL360 which powers up the CPLL, programmes it to 360 MHz via the
+// enableCPLL360 which powers up the CPLL, programmes it to 360 MHz via the
 // REGI2C analog I2C master, and switches the CPU clock source to CPLL.
 //
-// After EnableCPLL360:
+// After enableCPLL360:
 //   - CPU_CLK  = 360 MHz (CPLL / 1)
 //   - MEM_CLK  = 180 MHz (CPU / 2)
 //   - SYS_CLK  = 180 MHz (MEM / 1)
@@ -16,7 +16,7 @@
 //
 // Reference: extra/esp-idf/components/esp_hal_clock/esp32p4/include/hal/clk_tree_ll.h
 // and extra/esp-idf/components/esp_hw_support/port/esp32p4/rtc_clk.c
-package machine
+package runtime
 
 import (
 	"device/esp"
@@ -98,14 +98,14 @@ func cpllConfigure() bool {
 	return done
 }
 
-// EnableCPLL360 powers on the CPLL, configures it to 360 MHz, sets the clock
+// enableCPLL360 powers on the CPLL, configures it to 360 MHz, sets the clock
 // dividers, and switches the CPU clock source from XTAL to CPLL.
 //
 // After this call CPU=360 MHz, MEM=180 MHz, SYS=180 MHz, APB=90 MHz.
 //
 // Returns true if the PLL calibration succeeded and the clock switch completed.
 // On failure, the CPU remains at 40 MHz XTAL — the system is still functional.
-func EnableCPLL360() bool {
+func enableCPLL360() bool {
 	coreVoltage()
 
 	// Step 1: Power on CPLL.
@@ -217,4 +217,92 @@ func cpllBusUpdate() {
 // After this write the CPU immediately runs at the CPLL-derived frequency.
 func cpllSwitchToCPLL() {
 	esp.LP_AON_CLKRST.SetLP_AONCLKRST_HP_CLK_CTRL_LP_AONCLKRST_HP_ROOT_CLK_SRC_SEL(1) // 1 = CPLL
+}
+
+// regi2c (analog I2C master) register field layout of I2C0_CTRL (LP_I2C_ANA_MST).
+const (
+	r2cSlaveIDSh = 0  // bits [7:0] slave id (block)
+	r2cAddrSh    = 8  // bits [15:8] register address
+	r2cDataSh    = 16 // bits [23:16] data
+	r2cWriteBit  = 1 << 24
+	r2cBusy      = 1 << 25
+
+	// ANA_CONF2 block select bits (from regi2c_impl.c).
+	// Each analog I2C slave has a dedicated routing bit in ANA_CONF2.
+	r2cBlockMSPI = 0x63 // MSPI/MPLL
+	r2cBlockSPLL = 0x66 // System PLL
+	r2cBlockCPLL = 0x67 // CPU PLL
+
+	r2cSelMSPI = 1 << 9  // REGI2C_MSPI_XTAL_MST_SEL
+	r2cSelSPLL = 1 << 5  // REGI2C_PLL_SYS_MST_SEL
+	r2cSelCPLL = 1 << 11 // REGI2C_PLL_CPU_MST_SEL
+)
+
+// lpperiBase / clk-en bit for the low-power peripheral clock gate.
+const (
+	lpperiBase      = 0x50120000 // DR_REG_LPPERIPH_BASE
+	lpperiClkEnReg  = lpperiBase + 0x0
+	ckEnLpI2CMstBit = 1 << 27 // LPPERI_CK_EN_LP_I2CMST (analog I2C master clock)
+)
+
+// regi2cTimeout bounds the busy-wait on the analog I2C master controller so a
+// stuck bus returns instead of hanging the bring-up.
+const regi2cMaxBusy = 100000
+
+func r2cCtrl() *volatile.Register32 {
+	return &esp.LP_I2C_ANA_MST.I2C0_CTRL
+}
+
+// regi2cEnableGate enables the LP analog I2C master clock (regi2c) used to
+// reach the MPLL analog registers on the MSPI block.
+func regi2cEnableGate() {
+	clk := (*volatile.Register32)(unsafe.Pointer(uintptr(lpperiClkEnReg)))
+	clk.Set(clk.Get() | ckEnLpI2CMstBit)
+}
+
+// regi2cSelectBlock routes the analog-I2C master to the specified block.
+// The block parameter is the I2C slave ID (e.g. r2cBlockMSPI, r2cBlockCPLL).
+func regi2cSelectBlock(block uint8) {
+	esp.LP_I2C_ANA_MST.ANA_CONF1.Set(0)
+	esp.LP_I2C_ANA_MST.ANA_CONF2.Set(0)
+	var sel uint32
+	switch block {
+	case r2cBlockMSPI:
+		sel = r2cSelMSPI
+	case r2cBlockSPLL:
+		sel = r2cSelSPLL
+	case r2cBlockCPLL:
+		sel = r2cSelCPLL
+	default:
+		sel = r2cSelMSPI // fallback
+	}
+	esp.LP_I2C_ANA_MST.ANA_CONF2.Set(sel)
+}
+
+// regi2cWrite performs a single analog-I2C-master register write to `block`
+// (slave id), `reg` (address) with `data`, mirroring ESP-IDF _regi2c_impl_write
+// on the P4 LP_I2C_ANA_MST I2C0 controller.
+func regi2cWrite(block, reg, data uint8) {
+	regi2cSelectBlock(block)
+	ctrl := r2cCtrl()
+	for i := 0; ctrl.Get()&r2cBusy != 0 && i < regi2cMaxBusy; i++ {
+	}
+	ctrl.Set(uint32(block)<<r2cSlaveIDSh |
+		uint32(reg)<<r2cAddrSh |
+		r2cWriteBit |
+		uint32(data)<<r2cDataSh)
+	for i := 0; ctrl.Get()&r2cBusy != 0 && i < regi2cMaxBusy; i++ {
+	}
+}
+
+// regi2cRead performs a single analog-I2C-master register read.
+func regi2cRead(block, reg uint8) uint8 {
+	regi2cSelectBlock(block)
+	ctrl := r2cCtrl()
+	for i := 0; ctrl.Get()&r2cBusy != 0 && i < regi2cMaxBusy; i++ {
+	}
+	ctrl.Set(uint32(block)<<r2cSlaveIDSh | uint32(reg)<<r2cAddrSh)
+	for i := 0; ctrl.Get()&r2cBusy != 0 && i < regi2cMaxBusy; i++ {
+	}
+	return uint8(ctrl.Get() >> r2cDataSh)
 }
