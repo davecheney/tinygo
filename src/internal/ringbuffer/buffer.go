@@ -21,8 +21,9 @@ func (rb *Buffer) Used() uint8 {
 // full, the method will return false.
 func (rb *Buffer) Put(val byte) bool {
 	if rb.Used() != bufferSize {
-		rb.head.Set(rb.head.Get() + 1)
-		rb.rxbuffer[rb.head.Get()%bufferSize].Set(val)
+		head := rb.head.Get() + 1
+		rb.rxbuffer[head%bufferSize].Set(val)
+		rb.head.Set(head)
 		return true
 	}
 	return false
@@ -32,8 +33,10 @@ func (rb *Buffer) Put(val byte) bool {
 // the method will return a false as the second value.
 func (rb *Buffer) Get() (byte, bool) {
 	if rb.Used() != 0 {
-		rb.tail.Set(rb.tail.Get() + 1)
-		return rb.rxbuffer[rb.tail.Get()%bufferSize].Get(), true
+		tail := rb.tail.Get() + 1
+		val := rb.rxbuffer[tail%bufferSize].Get()
+		rb.tail.Set(tail)
+		return val, true
 	}
 	return 0, false
 }
