@@ -129,9 +129,6 @@ func callHandler(n int) {
 //go:linkname callHandlers runtime/interrupt.callHandlers
 func callHandlers(num int)
 
-//go:linkname signalInterrupt runtime.signalInterrupt
-func signalInterrupt()
-
 //go:linkname currentCPU runtime.currentCPU
 func currentCPU() uint32
 

@@ -6,7 +6,6 @@ import (
 	"device/esp"
 	"device/riscv"
 	"machine"
-	"runtime/interrupt"
 	"runtime/volatile"
 	"unsafe"
 )
@@ -90,54 +89,7 @@ func interruptInit() {
 	riscv.MSTATUS.SetBits(riscv.MSTATUS_MIE)
 }
 
-// CPU interrupt number used for the TIMG0 timer alarm.
-const timerAlarmCPUInterrupt = 9
-
-var interruptPending volatile.Register8
-
-func signalInterrupt() {
-	interruptPending.Set(1)
-}
-
-// initTimerInterrupt routes the TIMG0 timer 0 alarm interrupt to a CPU
-// interrupt and registers a handler.
-func initTimerInterrupt() {
-	// Map the TIMG0 T0 peripheral interrupt to the CLIC source for CPU
-	// interrupt number `timerAlarmCPUInterrupt`.  The INTMTX map register holds
-	// the CLIC source index, which is cpu_number + CLIC_EXT_INTR_NUM_OFFSET
-	// (the first 16 CLIC sources are internal/local).
-	esp.INTERRUPT_CORE0.TIMERGRP0_T0_INT_MAP.Set(timerAlarmCPUInterrupt + clicExtIntrNumOffset)
-
-	// Enable T0 interrupt at the timer group level.
-	esp.TIMG0.INT_ENA_TIMERS.SetBits(1)
-
-	// Register the interrupt handler.
-	interrupt.New(timerAlarmCPUInterrupt, func(interrupt.Interrupt) {
-		esp.TIMG0.INT_CLR_TIMERS.Set(1)
-	})
-
-	// Enable the CPU interrupt via the CLIC.
-	mie := riscv.DisableInterrupts()
-
-	// Clear any stale pending bit.
-	clicClearPending(timerAlarmCPUInterrupt)
-
-	// Set edge-triggered.
-	clicSetTrigger(timerAlarmCPUInterrupt, 1) // 1 = edge
-
-	// Set priority above threshold.
-	clicSetPriority(timerAlarmCPUInterrupt, 10)
-
-	riscv.Asm("fence")
-
-	// Enable this interrupt in the CLIC.
-	clicSetEnable(timerAlarmCPUInterrupt, true)
-
-	riscv.EnableInterrupts(mie)
-}
-
-// sleepTicks spins until the given number of ticks have elapsed. It does not
-// use the TIMG0 alarm interrupt.
+// sleepTicks spins until the given number of ticks have elapsed.
 func sleepTicks(d timeUnit) {
 	printlock()
 	machine.FlushSerial()

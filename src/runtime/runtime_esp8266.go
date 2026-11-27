@@ -97,7 +97,3 @@ func sleepTicks(d timeUnit) {
 	for ticks() < sleepUntil {
 	}
 }
-
-// sleepTicks busy-waits, so the ESP8266 needs no interrupt signal.
-func signalInterrupt() {
-}

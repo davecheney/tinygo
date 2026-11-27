@@ -6,7 +6,6 @@ import (
 	"device/esp"
 	"device/riscv"
 	"machine"
-	"runtime/interrupt"
 	"runtime/volatile"
 	"unsafe"
 )
@@ -67,9 +66,6 @@ func main() {
 	// Initialize main system timer used for time.Now.
 	initTimer()
 
-	// Initialize timer alarm interrupt for the scheduler.
-	initTimerInterrupt()
-
 	// Initialize the heap, call main.main, etc.
 	run()
 
@@ -104,62 +100,11 @@ func interruptInit() {
 	riscv.EnableInterrupts(mie)
 }
 
-// CPU interrupt number used for the TIMG0 timer alarm.
-const timerAlarmCPUInterrupt = 9
-
-var interruptPending volatile.Register8
-
-func signalInterrupt() {
-	interruptPending.Set(1)
-}
-
-var timerAlarmInterrupt interrupt.Interrupt
-
-// timerAlarmHandler clears the timer interrupt at the peripheral level.
-func timerAlarmHandler(interrupt.Interrupt) {
-	esp.TIMG0.INT_CLR_TIMERS.Set(1)
-}
-
-// initTimerInterrupt routes the TIMG0 timer 0 alarm interrupt to a CPU
-// interrupt and registers a handler that signals timerWakeup.
-func initTimerInterrupt() {
-	// Map the TIMG0 T0 peripheral interrupt to a CPU interrupt line.
-	esp.INTERRUPT_CORE0.TG_T0_INT_MAP.Set(timerAlarmCPUInterrupt)
-
-	// Enable T0 interrupt at the timer group level.
-	esp.TIMG0.INT_ENA_TIMERS.SetBits(1)
-
-	// Register the interrupt handler (compile-time wiring).
-	timerAlarmInterrupt = interrupt.New(timerAlarmCPUInterrupt, timerAlarmHandler)
-	timerAlarmInterrupt.Enable()
-
-	// Raise the priority above the default that Enable sets for peripherals.
-	priReg := (*volatile.Register32)(unsafe.Add(unsafe.Pointer(&esp.INTERRUPT_CORE0.CPU_INT_PRI_0), timerAlarmCPUInterrupt*4))
-	priReg.Set(10)
-}
-
-// sleepTicks spins until the given number of ticks have elapsed, using the
-// TIMG0 alarm interrupt to avoid busy-waiting for the entire duration.
+// sleepTicks spins until the given number of ticks have elapsed.
 func sleepTicks(d timeUnit) {
 	machine.FlushSerial()
 	target := ticks() + d
 	for ticks() < target {
-		// Set the alarm to fire at the target tick count (or as close
-		// as the 54-bit counter allows).
-		interruptPending.Set(0)
-
-		esp.TIMG0.T0ALARMLO.Set(uint32(target))
-		esp.TIMG0.T0ALARMHI.Set(uint32(target >> 32))
-
-		// Enable the alarm (auto-clears when alarm fires).
-		esp.TIMG0.T0CONFIG.SetBits(esp.TIMG_T0CONFIG_ALARM_EN)
-
-		// Wait for any interrupt (timer alarm or other) or a timeout.
-		for interruptPending.Get() == 0 {
-			if ticks() >= target {
-				return
-			}
-		}
 	}
 }
 

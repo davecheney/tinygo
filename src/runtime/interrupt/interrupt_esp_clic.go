@@ -140,9 +140,6 @@ func enableLocal(num uint32) {
 //go:linkname callHandlers runtime/interrupt.callHandlers
 func callHandlers(num int)
 
-//go:linkname signalInterrupt runtime.signalInterrupt
-func signalInterrupt()
-
 //go:linkname currentCPU runtime.currentCPU
 func currentCPU() uint32
 
@@ -335,9 +332,6 @@ func handleInterrupt() {
 		interruptDepth[core]++
 		callHandler(int(interruptNumber))
 		interruptDepth[core]--
-
-		// Signal to sleepTicks that an interrupt has occurred.
-		signalInterrupt()
 
 		// Disable CPU interrupts.
 		riscv.MSTATUS.ClearBits(riscv.MSTATUS_MIE)

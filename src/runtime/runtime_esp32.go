@@ -67,9 +67,6 @@ func main() {
 	// interrupt line - otherwise that enable would be wiped out here.
 	interruptInit()
 
-	// Initialize timer alarm interrupt for the scheduler.
-	initTimerInterrupt()
-
 	// Initialize UART. This enables the UART RX interrupt, which must happen
 	// after interruptInit so the INTENABLE bit is not cleared again.
 	machine.InitSerial()

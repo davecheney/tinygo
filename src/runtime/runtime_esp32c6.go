@@ -91,9 +91,6 @@ func main() {
 	// Initialize main system timer used for time.Now.
 	initTimer()
 
-	// Initialize timer alarm interrupt for the scheduler.
-	initTimerInterrupt()
-
 	// Initialize the heap, call main.main, etc.
 	run()
 

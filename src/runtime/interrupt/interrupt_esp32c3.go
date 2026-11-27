@@ -88,9 +88,6 @@ func handleInterrupt() {
 		// Call registered interrupt handler(s)
 		callHandler(int(interruptNumber))
 
-		// Signal to sleepTicks that an interrupt has occurred.
-		signalInterrupt()
-
 		// disable CPU interrupts
 		riscv.MSTATUS.ClearBits(riscv.MSTATUS_MIE)
 

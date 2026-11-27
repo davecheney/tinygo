@@ -102,9 +102,6 @@ func handleInterrupt() {
 		}
 	}
 
-	// Signal to sleepTicks that an interrupt has occurred.
-	signalInterrupt()
-
 	inInterrupt[core] = false
 }
 
