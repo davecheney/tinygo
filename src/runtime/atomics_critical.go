@@ -6,7 +6,7 @@
 package runtime
 
 import (
-	_ "unsafe"
+	"unsafe"
 )
 
 // Documentation:
@@ -515,4 +515,23 @@ func __sync_fetch_and_or_8(ptr *uint64, value uint64) uint64 {
 func __atomic_or_fetch_8(ptr *uint64, value uint64, ordering uintptr) uint64 {
 	_, new := doAtomicOr64(ptr, value)
 	return new
+}
+
+// Generic atomics.
+
+// LLVM calls these for an atomic that is not aligned to its size.
+// See https://gcc.gnu.org/wiki/Atomic/GCCMM/LIbrary
+//
+//export __atomic_load
+func __atomic_load(size uintptr, ptr, ret unsafe.Pointer, ordering uintptr) {
+	mask := lockAtomics()
+	memcpy(ret, ptr, size)
+	unlockAtomics(mask)
+}
+
+//export __atomic_store
+func __atomic_store(size uintptr, ptr, val unsafe.Pointer, ordering uintptr) {
+	mask := lockAtomics()
+	memcpy(ptr, val, size)
+	unlockAtomics(mask)
 }

@@ -25,7 +25,7 @@ var tmpl = template.Must(template.New("go").Funcs(template.FuncMap{
 package runtime
 
 import (
-	_ "unsafe"
+	"unsafe"
 )
 
 // Documentation:
@@ -150,6 +150,24 @@ func __atomic_{{$opname}}_fetch_{{$bytes}}(ptr *{{$type}}, value {{$type}}, orde
 {{template "atomics" 2 -}}
 {{template "atomics" 4 -}}
 {{template "atomics" 8}}
+// Generic atomics.
+
+// LLVM calls these for an atomic that is not aligned to its size.
+// See https://gcc.gnu.org/wiki/Atomic/GCCMM/LIbrary
+//
+//export __atomic_load
+func __atomic_load(size uintptr, ptr, ret unsafe.Pointer, ordering uintptr) {
+	mask := lockAtomics()
+	memcpy(ret, ptr, size)
+	unlockAtomics(mask)
+}
+
+//export __atomic_store
+func __atomic_store(size uintptr, ptr, val unsafe.Pointer, ordering uintptr) {
+	mask := lockAtomics()
+	memcpy(ptr, val, size)
+	unlockAtomics(mask)
+}
 `))
 
 func main() {
