@@ -53,8 +53,13 @@ func (b *builder) createVolatileRegisterOp(name string, args []ssa.Value, pos to
 	valType := b.getLLVMType(fieldType)
 	// Reg is the only field, so the receiver is the register address.
 	addr := b.getValue(recv, pos)
-	if _, ok := recv.(*ssa.FieldAddr); !ok {
+	switch recv.(type) {
+	case *ssa.FieldAddr:
 		// A FieldAddr result is never nil, its base was already checked.
+	case *ssa.FreeVar:
+		// A bound method receiver can be nil.
+		b.createNilCheckPointer(addr, "deref")
+	default:
 		b.createNilCheck(recv, addr, "deref")
 	}
 	load := func() llvm.Value {

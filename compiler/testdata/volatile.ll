@@ -256,8 +256,30 @@ unwind.return:                                    ; preds = %gep.throw
 ; Function Attrs: nounwind
 define linkonce_odr hidden void @"(*runtime/volatile.Register32).Set$bound"(i32 %value, ptr %context) unnamed_addr #1 {
 entry:
+  %0 = icmp eq ptr %context, null
+  br i1 %0, label %deref.throw, label %deref.next
+
+deref.next:                                       ; preds = %entry
   store volatile i32 %value, ptr %context, align 4
   ret void
+
+deref.throw:                                      ; preds = %entry
+  call void @runtime.nilPanic(ptr undef) #2
+  br label %unwind.return
+
+unwind.return:                                    ; preds = %deref.throw
+  ret void
+}
+
+; Function Attrs: nounwind
+define hidden { ptr, ptr } @main.regPointerMethodValue(ptr dereferenceable_or_null(4) %r, ptr %context) unnamed_addr #1 {
+entry:
+  %stackalloc = alloca i8, align 1
+  %0 = insertvalue { ptr, ptr } undef, ptr %r, 0
+  %1 = insertvalue { ptr, ptr } %0, ptr @"(*runtime/volatile.Register32).Set$bound", 1
+  call void @runtime.trackPointer(ptr %r, ptr nonnull %stackalloc, ptr undef) #2
+  call void @runtime.trackPointer(ptr nonnull @"(*runtime/volatile.Register32).Set$bound", ptr nonnull %stackalloc, ptr undef) #2
+  ret { ptr, ptr } %1
 }
 
 ; Function Attrs: nounwind

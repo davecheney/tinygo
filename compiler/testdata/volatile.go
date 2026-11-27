@@ -55,6 +55,10 @@ func regMethodValue(p *peripheral) func(uint32) {
 	return p.CTRL.Set
 }
 
+func regPointerMethodValue(r *volatile.Register32) func(uint32) {
+	return r.Set
+}
+
 func regCallMethodValue(p *peripheral, v uint32) {
 	f := p.CTRL.Set
 	f(v)
