@@ -1,5 +1,5 @@
 {
 	"inherits": ["cortex-m4", "stm32"],
 	"inheritable-only": true,
-	"build-tags": ["stm32f4", "machine.spi"]
+	"build-tags": ["stm32f4", "machine.spi", "machine.flash"]
 }
